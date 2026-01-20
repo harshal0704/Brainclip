@@ -1,0 +1,742 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body,div,span,p{font-family:var(--font-sans)}
+.root{padding:.5rem 0}
+.tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:.5px solid var(--color-border-tertiary);margin-bottom:1.2rem}
+.tab{padding:6px 11px;font-size:11.5px;color:var(--color-text-secondary);cursor:pointer;border-bottom:2px solid transparent;border-radius:4px 4px 0 0;transition:all .12s;white-space:nowrap}
+.tab:hover{color:var(--color-text-primary);background:var(--color-background-secondary)}
+.tab.on{color:var(--color-text-primary);border-bottom-color:var(--color-text-primary);font-weight:500}
+.panel{display:none}.panel.on{display:block}
+.sec{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--color-text-tertiary);margin:0 0 9px}
+.sec-gap{margin-top:16px}
+.card{background:var(--color-background-primary);border:.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:.85rem 1rem;margin-bottom:9px}
+.card-h{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.card-b{font-size:12px;color:var(--color-text-secondary);line-height:1.75}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.four{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;margin:1px}
+.bg{background:var(--color-background-success);color:var(--color-text-success)}
+.bb{background:var(--color-background-info);color:var(--color-text-info)}
+.ba{background:var(--color-background-warning);color:var(--color-text-warning)}
+.br{background:var(--color-background-danger);color:var(--color-text-danger)}
+.bp{background:#EEEDFE;color:#534AB7}
+.bt{background:#E1F5EE;color:#0F6E56}
+.row{display:flex;gap:9px;align-items:flex-start;padding:7px 0;border-bottom:.5px solid var(--color-border-tertiary)}
+.row:last-child{border-bottom:none}
+.rl{font-size:12px;color:var(--color-text-secondary);line-height:1.7;flex:1}
+.rl strong{color:var(--color-text-primary);font-weight:500}
+.code{background:var(--color-background-secondary);border:.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:8px 11px;font-family:var(--font-mono);font-size:11px;color:var(--color-text-primary);margin:6px 0;line-height:1.9;white-space:pre;overflow-x:auto}
+.warn{background:var(--color-background-warning);border:.5px solid var(--color-border-warning);border-radius:var(--border-radius-md);padding:8px 11px;font-size:11.5px;color:var(--color-text-warning);margin-bottom:9px;line-height:1.6}
+.succ{background:var(--color-background-success);border:.5px solid var(--color-border-success);border-radius:var(--border-radius-md);padding:8px 11px;font-size:11.5px;color:var(--color-text-success);margin-bottom:9px;line-height:1.6}
+.info{background:var(--color-background-info);border:.5px solid var(--color-border-info);border-radius:var(--border-radius-md);padding:8px 11px;font-size:11.5px;color:var(--color-text-info);margin-bottom:9px;line-height:1.6}
+.danger{background:var(--color-background-danger);border:.5px solid var(--color-border-danger);border-radius:var(--border-radius-md);padding:8px 11px;font-size:11.5px;color:var(--color-text-danger);margin-bottom:9px;line-height:1.6}
+.api-r{display:flex;gap:7px;align-items:baseline;padding:6px 0;border-bottom:.5px solid var(--color-border-tertiary)}
+.api-r:last-child{border-bottom:none}
+.m{font-size:10px;font-weight:600;font-family:var(--font-mono);padding:2px 5px;border-radius:3px}
+.mG{background:var(--color-background-success);color:var(--color-text-success)}
+.mP{background:var(--color-background-info);color:var(--color-text-info)}
+.mD{background:var(--color-background-danger);color:var(--color-text-danger)}
+.ap{font-size:11.5px;font-family:var(--font-mono);color:var(--color-text-primary);flex:1;min-width:0}
+.ad{font-size:11px;color:var(--color-text-secondary)}
+.stab{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+.so{padding:5px 10px;border:.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:11.5px;cursor:pointer;color:var(--color-text-secondary);transition:all .12s}
+.so:hover{background:var(--color-background-secondary)}
+.so.on{border-color:var(--color-border-info);background:var(--color-background-info);color:var(--color-text-info)}
+.vd{display:none}.vd.on{display:block}
+.sn{width:22px;height:22px;min-width:22px;border-radius:50%;background:var(--color-background-secondary);border:.5px solid var(--color-border-secondary);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:var(--color-text-primary);flex-shrink:0;margin-top:1px}
+.sh{font-size:12.5px;font-weight:500;color:var(--color-text-primary);margin-bottom:1px}
+.sd{font-size:11.5px;color:var(--color-text-secondary);line-height:1.55}
+.ec-row{display:flex;gap:9px;padding:8px 0;border-bottom:.5px solid var(--color-border-tertiary);align-items:flex-start}
+.ec-row:last-child{border-bottom:none}
+.ec-cat{font-size:10px;font-weight:600;min-width:80px;padding-top:2px;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em}
+.ec-body{flex:1;font-size:12px;color:var(--color-text-secondary);line-height:1.65}
+.ec-body strong{color:var(--color-text-primary);font-weight:500;display:block;margin-bottom:2px}
+.tbl{width:100%;border-collapse:collapse;font-size:11.5px}
+.tbl th{text-align:left;font-weight:500;color:var(--color-text-secondary);padding:5px 7px;border-bottom:.5px solid var(--color-border-secondary);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+.tbl td{padding:6px 7px;border-bottom:.5px solid var(--color-border-tertiary);color:var(--color-text-secondary);vertical-align:top}
+.tbl td strong{color:var(--color-text-primary)}
+.tbl tr:last-child td{border-bottom:none}
+.phase-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px}
+.phase-c{border:.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:.85rem 1rem}
+.phase-h{font-size:11.5px;font-weight:500;color:var(--color-text-primary);margin-bottom:8px;padding-bottom:6px;border-bottom:.5px solid var(--color-border-tertiary)}
+.pitem{padding:5px 0;border-bottom:.5px solid var(--color-border-tertiary);font-size:11.5px;color:var(--color-text-secondary);line-height:1.55}
+.pitem:last-child{border-bottom:none}
+.pitem strong{color:var(--color-text-primary);font-weight:500;display:block}
+.prompt-b{background:var(--color-background-secondary);border:.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 13px;font-size:11.5px;color:var(--color-text-primary);line-height:1.85;margin:6px 0;white-space:pre-wrap;word-break:break-word}
+</style>
+
+<div class="root">
+<div class="tabs">
+  <div class="tab on" onclick="T('arch')">Architecture</div>
+  <div class="tab" onclick="T('userflow')">User flow</div>
+  <div class="tab" onclick="T('storage')">Storage & DB</div>
+  <div class="tab" onclick="T('voice')">Voice engine</div>
+  <div class="tab" onclick="T('llm')">LLM prompt</div>
+  <div class="tab" onclick="T('remotion')">Remotion Lambda</div>
+  <div class="tab" onclick="T('stickers')">Stickers & overlays</div>
+  <div class="tab" onclick="T('editing')">Editing options</div>
+  <div class="tab" onclick="T('api')">API surface</div>
+  <div class="tab" onclick="T('edge')">Edge cases</div>
+  <div class="tab" onclick="T('build')">Build order</div>
+  <div class="tab" onclick="T('opencode')">opencode CLI</div>
+</div>
+
+<!-- ===== ARCHITECTURE ===== -->
+<div class="panel on" id="tab-arch">
+<div class="sec">Complete system — four independent layers</div>
+<div class="succ">Final architecture: Vercel (UI + orchestration) · Google Colab (voice only, BYOK GPU) · AWS Lambda (Remotion render, ~$0.03/video) · AWS S3 (per-user isolated storage). Each layer is independently replaceable.</div>
+<div class="four">
+  <div class="card"><div class="card-h"><span class="badge bb">Layer 1</span> Vercel</div><div class="card-b">Next.js App Router. Auth, dashboard, job creation, Remotion Player preview, script editor, polling, delivery. Zero compute cost — serverless.</div></div>
+  <div class="card"><div class="card-h"><span class="badge bg">Layer 2</span> Colab</div><div class="card-b">Fish Speech S2-Pro TTS only. FastAPI server exposed via Cloudflare Tunnel. Generates WAVs + word timestamps, uploads to user S3. Optional — fish.audio API replaces it.</div></div>
+  <div class="card"><div class="card-h"><span class="badge bp">Layer 3</span> Lambda</div><div class="card-b">Remotion renderMediaOnLambda. Parallel frame rendering across ~50 Lambda functions. 2-min 720p video renders in ~30 sec. Costs ~$0.03–0.05/render.</div></div>
+  <div class="card"><div class="card-h"><span class="badge ba">Layer 4</span> S3</div><div class="card-b">Per-user private bucket svgen-{userId}. Audio WAVs, transcript JSON, final MP4, voice refs, custom assets. Lifecycle: 30d audio, 7d video auto-expiry.</div></div>
+</div>
+<div class="sec sec-gap">Data flow — one complete job lifecycle</div>
+<div class="card"><div class="card-b">
+  <div class="row"><div class="sn">1</div><div style="flex:1"><div class="sh">Login → provision</div><div class="sd">Google OAuth via NextAuth. First login: create UUID, provision S3 bucket svgen-{userId} with private ACL + lifecycle rules. Store in DB. Subsequent logins skip.</div></div></div>
+  <div class="row"><div class="sn">2</div><div style="flex:1"><div class="sh">Job creation → script gen</div><div class="sd">User picks duo, topic, style, background, voice mode. Next.js calls user's BYOK LLM key with the full system prompt → validates ScriptLine[] JSON → stores job in DB with status pending.</div></div></div>
+  <div class="row"><div class="sn">3</div><div style="flex:1"><div class="sh">Presigned URL generation</div><div class="sd">Server generates presigned S3 PUT URLs for each expected file: audio/{jobId}/line_{n}.wav, transcripts/{jobId}/words.json, videos/{jobId}/final.mp4. Included in VoiceJobRequest.</div></div></div>
+  <div class="row"><div class="sn">4</div><div style="flex:1"><div class="sh">Voice stage (Colab or fish.audio API)</div><div class="sd">Colab: POST /voice/job → Fish S2-Pro generates all speaker WAVs + faster-whisper word timestamps → uploads directly to user S3 via presigned PUTs → sets status voice_done. Fish.audio API mode: Next.js proxies TTS calls, uploads to S3 itself.</div></div></div>
+  <div class="row"><div class="sn">5</div><div style="flex:1"><div class="sh">Render trigger</div><div class="sd">Next.js detects voice_done via polling → calls renderMediaOnLambda() with full ReelComposition inputProps including presigned GET URLs for audio + transcript. Stores renderId + bucketName in DB.</div></div></div>
+  <div class="row"><div class="sn">6</div><div style="flex:1"><div class="sh">Lambda render</div><div class="sd">~50 Lambda functions render in parallel at 12 frames each. Remotion stitches chunks. Final MP4 uploaded to user S3 at videos/{jobId}/final.mp4. Lambda self-cleans after 7 days.</div></div></div>
+  <div class="row"><div class="sn" style="background:var(--color-background-success);border-color:var(--color-border-success)">7</div><div style="flex:1"><div class="sh">Delivery</div><div class="sd">Server generates 1-hour presigned GET URL for final video. Frontend shows Remotion Player preview + download button. Optional: copy to user Google Drive.</div></div></div>
+</div></div>
+<div class="sec sec-gap">Resolution strategy</div>
+<div class="two">
+  <div class="card"><div class="card-h"><span class="badge bg">720p default</span> 720×1280 vertical</div><div class="card-b">Primary render quality. 30fps H.264. CRF 23. Render time ~25–35 sec on Lambda. Recommended for all final exports.</div></div>
+  <div class="card"><div class="card-h"><span class="badge ba">480p draft</span> 480×854 vertical</div><div class="card-b">Fast preview mode. CRF 26. Render time ~12–18 sec. Use for browser-preview before committing final 720p render. Saves Lambda cost during iteration.</div></div>
+</div>
+</div>
+
+<!-- ===== USER FLOW ===== -->
+<div class="panel" id="tab-userflow">
+<div class="sec">Complete user journey — every screen and decision</div>
+<div class="card"><div class="card-h">Onboarding (first visit)</div><div class="card-b">
+  <div class="row"><div class="sn">1</div><div style="flex:1"><div class="sh">Google sign-in</div><div class="sd">NextAuth Google provider. On first login: create user record (uuid, googleId, email). Provision S3 bucket. Show onboarding wizard.</div></div></div>
+  <div class="row"><div class="sn">2</div><div style="flex:1"><div class="sh">Settings wizard</div><div class="sd">Step 1: Choose voice mode — Colab (paste tunnel URL) or Fish.audio API (paste BYOK key). Step 2: Add LLM API key + choose model. Step 3: Optional Google Drive connect for export. Step 4: Preview a sample voice.</div></div></div>
+  <div class="row"><div class="sn">3</div><div style="flex:1"><div class="sh">Voice setup</div><div class="sd">For Colab mode: app pings /health on the Colab URL to validate. For fish.audio API: app calls GET /model to confirm key is valid. Shows green checkmark on success.</div></div></div>
+</div></div>
+<div class="card"><div class="card-h">Job creation flow</div><div class="card-b">
+  <div class="row"><div class="sn">4</div><div style="flex:1"><div class="sh">Pick duo + topic</div><div class="sd">Select a duo preset (e.g. Expert vs Beginner, Debate partners) or build a custom pair. Each speaker gets a persona description used in the LLM prompt. Enter the video topic.</div></div></div>
+  <div class="row"><div class="sn">5</div><div style="flex:1"><div class="sh">Configure voice sources</div><div class="sd">Per speaker: select preset voice pack (from registry) OR upload a reference clip (custom clone) OR enter fish.audio model_id. Preview plays a 3-sec sample.</div></div></div>
+  <div class="row"><div class="sn">6</div><div style="flex:1"><div class="sh">Generate script</div><div class="sd">App calls POST /api/script/generate with topic + persona + tone + language. LLM returns ScriptLine[] with Fish Audio params. User sees the script in a line editor. Can edit any line, change emotion, adjust pause_ms. Changes are persisted in the job record.</div></div></div>
+  <div class="row"><div class="sn">7</div><div style="flex:1"><div class="sh">Visual editor (Remotion Player)</div><div class="sd">Live preview using Remotion Player in the browser. User picks: background video, subtitle style (8 presets), subtitle font + size + colour, sticker animation mode, overlay effects, CTA end card. All changes update the preview in real-time — no render triggered yet.</div></div></div>
+  <div class="row"><div class="sn">8</div><div style="flex:1"><div class="sh">Start render</div><div class="sd">User clicks Render. App creates job, generates presigned PUT URLs, dispatches voice job to Colab (or fish.audio API). Dashboard shows live stage + progress bar.</div></div></div>
+</div></div>
+<div class="card"><div class="card-h">Post-render actions</div><div class="card-b">
+  <div class="row"><div class="sn">9</div><div style="flex:1"><div class="sh">Preview + download</div><div class="sd">Final video plays in Remotion Player. Download button generates 1-hour presigned GET URL. Drive export button sends video to user's connected Drive folder.</div></div></div>
+  <div class="row"><div class="sn">10</div><div style="flex:1"><div class="sh">Iterate</div><div class="sd">Edit any script line → re-TTS that line only (delta re-render) → re-render only the affected frames. Or change subtitle style/sticker → re-render video only, skip voice stage entirely (audio is cached in S3).</div></div></div>
+</div></div>
+</div>
+
+<!-- ===== STORAGE & DB ===== -->
+<div class="panel" id="tab-storage">
+<div class="sec">S3 per-user bucket structure</div>
+<div class="card"><div class="card-b">
+<div class="code">bucket: svgen-{userId}        (e.g. svgen-a3f9c1d2-8b1e-4c7a-...)
+region: ap-south-1            (Mumbai — lowest latency for India)
+
+/audio/{jobId}/
+    line_001_A.wav            per-line WAV from Fish S2-Pro
+    line_002_B.wav
+    master.wav                concatenated with pause gaps
+/transcripts/{jobId}/
+    words.json                [{word,start,end,speaker}] from faster-whisper
+    script.json               original ScriptLine[] for replay
+/videos/{jobId}/
+    draft_480p.mp4            optional draft render
+    final_720p.mp4            final delivery video
+/voice-refs/{speakerId}/
+    ref_1.wav                 user's uploaded reference clips
+    ref_2.wav
+    speaker_tokens.pkl        encoded S2-Pro prompt tokens (Colab cache)
+/assets/
+    packs/{packId}/
+        background_1.mp4      user-uploaded custom backgrounds
+        sticker_a.png
+        sticker_b.png</div>
+</div></div>
+<div class="two">
+  <div class="card"><div class="card-h">Lifecycle rules (set on bucket creation)</div><div class="card-b"><div class="code">audio/* → expire after 30 days
+transcripts/* → expire after 30 days
+videos/*/draft_* → expire after 3 days
+videos/*/final_* → expire after 7 days
+voice-refs/* → never expire (user data)
+assets/* → never expire (user data)</div></div></div>
+  <div class="card"><div class="card-h">Cost optimisation</div><div class="card-b">
+    <div class="row" style="padding:5px 0"><div class="rl"><strong>Same-region transfer free:</strong> Lambda in ap-south-1 reads S3 in ap-south-1 → $0 egress.</div></div>
+    <div class="row" style="padding:5px 0"><div class="rl"><strong>Background clips on R2:</strong> Cloudflare R2 has free egress. Host background video packs there, not S3.</div></div>
+    <div class="row" style="padding:5px 0;border:none"><div class="rl"><strong>IAM instance role:</strong> Lambda function role has s3:GetObject + s3:PutObject on svgen-* only. No long-lived keys.</div></div>
+  </div></div>
+</div>
+<div class="sec sec-gap">Database schema (Drizzle ORM + Postgres)</div>
+<div class="card"><div class="card-b"><div class="code">// users
+id uuid PK, googleId text UNIQUE, email text,
+s3Bucket text, s3Region text,
+colabUrl text, colabHealthy boolean,
+fishApiKey text (encrypted), fishModelA text, fishModelB text,
+llmApiKey text (encrypted), llmModel text,
+driveRefreshToken text (encrypted),
+createdAt timestamp, updatedAt timestamp
+
+// jobs
+id uuid PK, userId uuid FK→users,
+status: "pending"|"voice_processing"|"voice_done"
+        |"rendering"|"done"|"failed",
+stage text, progressPct int,
+scriptLines jsonb,          -- ScriptLine[]
+voiceMap jsonb,             -- VoicePackRef per speaker
+editConfig jsonb,           -- full Remotion inputProps
+subtitleStyleId text, backgroundUrl text, assetPackId text,
+resolution "720p"|"480p",
+s3AudioKeys jsonb,          -- {lineId: s3Key}
+s3TranscriptKey text,
+s3VideoKey text,
+lambdaRenderId text, lambdaBucket text,
+errorMessage text,
+createdAt timestamp, updatedAt timestamp
+
+// voice_packs (preset registry)
+id text PK, label text, persona text, language text,
+gender text, tags text[],
+previewUrl text,            -- 3-sec MP3 for UI preview
+colabRefUrl text,           -- S3/R2 URL for reference clip
+fishModelId text,           -- fish.audio model_id
+recommendedEmotion text, recommendedRate float</div></div></div>
+</div>
+
+<!-- ===== VOICE ENGINE ===== -->
+<div class="panel" id="tab-voice">
+<div class="sec">Voice engine — all modes</div>
+<div class="stab">
+  <div class="so on" onclick="V('s2pro')">Fish S2-Pro (Colab)</div>
+  <div class="so" onclick="V('fishapi')">Fish.audio API</div>
+  <div class="so" onclick="V('custom')">Custom clone</div>
+  <div class="so" onclick="V('preset')">Preset packs</div>
+  <div class="so" onclick="V('emotion')">Emotion controls</div>
+  <div class="so" onclick="V('colab')">Colab FastAPI</div>
+</div>
+
+<div class="vd on" id="v-s2pro">
+<div class="card"><div class="card-h">Fish Speech 1.5 (S2-Pro family) on Colab</div><div class="card-b">
+  <div class="row"><div class="rl"><strong>Model:</strong> fishaudio/fish-speech-1.5 from HuggingFace (~1.5 GB). Download once per session, cache at /content/models/fish-speech/. Requires ~4GB VRAM → fits T4 free Colab GPU.</div></div>
+  <div class="row"><div class="rl"><strong>Zero-shot cloning:</strong> Pass 5–15 sec reference audio + transcript text. Model encodes speaker timbre as prompt_tokens. No fine-tuning. Cache tokens per speaker for the whole job session.</div></div>
+  <div class="row"><div class="rl"><strong>Batch inference:</strong> Send all lines for one speaker in a single call with the same prompt_tokens. ~3× faster than one call per line. Essential for staying within Colab session time.</div></div>
+  <div class="row"><div class="rl"><strong>Output:</strong> 44.1 kHz WAV per line. Concatenate with pause_ms silence gaps into master.wav. Upload per-line WAVs + master to S3 via presigned PUTs.</div></div>
+  <div class="row"><div class="rl"><strong>faster-whisper:</strong> Run on master.wav after TTS → word-level {word, start, end} timestamps → save as words.json to S3. Use large-v2 model for best accuracy.</div></div>
+</div></div>
+<div class="code">from fish_speech.inference import InferenceEngine
+import soundfile as sf, io, boto3
+
+engine = InferenceEngine("/content/models/fish-speech")
+
+# Encode reference once per speaker (cache per session)
+ref_tokens = engine.encode_reference(
+    audio_path="/tmp/ref_a.wav",
+    text="reference transcript text here"
+)
+
+lines_a = [l for l in script_lines if l["speaker"] == "A"]
+for line in lines_a:
+    wav_bytes = engine.tts(
+        text=line["text"],
+        prompt_tokens=ref_tokens,
+        emotion=line["emotion"],        # e.g. "excited"
+        speaking_rate=line["speaking_rate"],
+        temperature=line["temperature"],
+        top_p=0.7,
+        chunk_length=200,
+        normalize=True
+    )
+    # Upload to user S3 via presigned PUT
+    requests.put(presigned_urls[line["id"]], data=wav_bytes)</div>
+</div>
+
+<div class="vd" id="v-fishapi">
+<div class="card"><div class="card-h">Fish.audio hosted API — no Colab needed</div><div class="card-b">
+  <div class="row"><div class="rl"><strong>When to use:</strong> No Colab session available, or user wants instant TTS without GPU cold-start (~5–10 min Colab warmup). User provides BYOK fish_api_key in settings.</div></div>
+  <div class="row"><div class="rl"><strong>Voice model registration:</strong> User uploads a ref clip once → POST /model → get persistent model_id. Stored in user profile per speaker. Reused for all future jobs.</div></div>
+  <div class="row"><div class="rl"><strong>TTS call:</strong> POST https://api.fish.audio/v1/tts with model_id, text, and style params. Returns streaming audio bytes.</div></div>
+  <div class="row"><div class="rl"><strong>Transcript generation:</strong> Next.js server uploads audio to S3, then calls faster-whisper running on a small EC2 t2.micro (or a free Colab notebook) to generate word timestamps. This is the only Colab dependency in API mode.</div></div>
+</div></div>
+<div class="code">// Next.js API route — /api/tts/fish
+const ttsRes = await fetch("https://api.fish.audio/v1/tts", {
+  method: "POST",
+  headers: { Authorization: `Bearer ${user.fishApiKey}`,
+             "Content-Type": "application/json" },
+  body: JSON.stringify({
+    model_id: speaker.fishModelId,
+    text: line.text,
+    format: "wav",
+    latency: "normal",      // "normal" | "balanced"
+    chunk_length: 200,
+    normalize: true,
+    // emotion via system prompt prefix — fish.audio API
+    // supports [emotion] tags inline in text
+  })
+});
+const audioBuffer = await ttsRes.arrayBuffer();
+await s3.putObject({ Bucket: userBucket,
+  Key: `audio/${jobId}/${line.id}.wav`, Body: Buffer.from(audioBuffer) });</div>
+</div>
+
+<div class="vd" id="v-custom">
+<div class="card"><div class="card-h">Custom reference clip cloning</div><div class="card-b">
+  <div class="row"><div class="rl"><strong>Upload UX:</strong> Settings screen lets user upload 1–3 WAV/MP3 clips per speaker (5–15 sec each). App stores at voice-refs/{speakerId}/ref_{n}.wav in user S3.</div></div>
+  <div class="row"><div class="rl"><strong>Quality tips shown in modal:</strong> "Quiet room, no music, no reverb. Read at least 10 seconds of natural speech. Multiple clips improve consistency."</div></div>
+  <div class="row"><div class="rl"><strong>Multi-clip fusion:</strong> Colab averages the prompt_tokens across 2–3 clips before encoding. Better voice consistency, especially for longer scripts. Cached as speaker_tokens.pkl in S3.</div></div>
+  <div class="row"><div class="rl"><strong>Fish.audio API mode:</strong> Upload ref clip to POST /model → store returned model_id in user profile. S2-Pro on fish.audio uses it server-side.</div></div>
+</div></div>
+</div>
+
+<div class="vd" id="v-preset">
+<div class="card"><div class="card-h">Preset voice pack registry</div><div class="card-b">
+  <div class="row"><div class="rl"><strong>Registry format:</strong> JSON metadata file in the app repo. Each entry has display name, persona, preview MP3 URL, language, gender, tags, colabRefUrl (reference clip), fishModelId (for API mode), recommendedEmotion, recommendedRate.</div></div>
+  <div class="row"><div class="rl"><strong>Colab mode:</strong> Colab fetches ref clip from colabRefUrl once, encodes prompt_tokens, caches as /content/cache/{packId}_tokens.pkl for the session. Repeat jobs using the same pack skip re-encoding.</div></div>
+  <div class="row"><div class="rl"><strong>API mode:</strong> Registry stores a fishModelId. App uses it directly — no download needed. Zero Colab dependency for preset voices in API mode.</div></div>
+  <div class="row"><div class="rl"><strong>Preview:</strong> UI plays 3-sec preview clip on hover using an HTML audio tag. No API call, no cost, instant feedback.</div></div>
+</div></div>
+</div>
+
+<div class="vd" id="v-emotion">
+<div class="card"><div class="card-h">Fish Audio prosody + emotion parameters — full reference</div></div>
+<div class="two">
+  <div class="card"><div class="card-b">
+    <div class="row"><div class="rl"><strong>emotion:</strong> neutral · happy · sad · angry · surprised · excited · whispering · shouting. Set per ScriptLine by the LLM based on dialogue context.</div></div>
+    <div class="row"><div class="rl"><strong>speaking_rate:</strong> 0.75–1.25. Slow dramatic = 0.8. Normal = 1.0. Fast energetic = 1.2. Per-line override in script JSON.</div></div>
+    <div class="row"><div class="rl"><strong>pause_ms:</strong> 150–800ms silence inserted between lines. Questions: 400–600ms. Punchlines: 600–800ms. Standard turn: 200ms.</div></div>
+    <div class="row"><div class="rl"><strong>temperature:</strong> 0.5 (stable) → 0.7 (natural) → 1.0 (expressive). Per-speaker setting, not per-line.</div></div>
+  </div></div>
+  <div class="card"><div class="card-b">
+    <div class="row"><div class="rl"><strong>top_p:</strong> 0.6–0.9. Lower = more deterministic, better for consistent character voices. Use 0.7 as default.</div></div>
+    <div class="row"><div class="rl"><strong>chunk_length:</strong> 100–300 chars per synthesis chunk. 200 is optimal — longer gives more natural prosody across sentences.</div></div>
+    <div class="row"><div class="rl"><strong>normalize:</strong> Auto text normalisation for numbers, abbreviations, punctuation. Always true.</div></div>
+    <div class="row"><div class="rl"><strong>language:</strong> Auto-detect or explicit — en, zh, ja, ko, hi, fr, de, es, ar. S2-Pro handles code-switching (e.g. Hinglish).</div></div>
+  </div></div>
+</div>
+</div>
+
+<div class="vd" id="v-colab">
+<div class="card"><div class="card-h">Colab FastAPI server — full spec</div><div class="card-b">
+  <div class="row"><div class="rl"><strong>Startup:</strong> Notebook cell installs fish-speech, faster-whisper, fastapi, uvicorn, cloudflared. Starts FastAPI on port 8000. Runs cloudflare tunnel → prints public URL. User pastes URL into app settings.</div></div>
+  <div class="row"><div class="rl"><strong>Session persistence:</strong> Models stay loaded in memory across jobs. Speaker token cache lives in /content/cache/. Background video packs cached in /content/bgcache/. All cleared on session end.</div></div>
+  <div class="row"><div class="rl"><strong>Health check:</strong> GET /health returns {status, models_loaded, gpu_memory_free, session_id}. App checks this before dispatching every job.</div></div>
+</div></div>
+<div class="code">GET  /health              → {status, models_loaded, gpu_mb_free}
+POST /voice/job           → accept VoiceJobRequest, return {jobId} immediately
+GET  /voice/job/{jobId}   → {stage, progressPct, error?}
+POST /voice/encode-ref    → encode reference clip, return cache_key
+DELETE /voice/cache/{key} → clear cached speaker tokens</div>
+</div>
+</div>
+
+<!-- ===== LLM PROMPT ===== -->
+<div class="panel" id="tab-llm">
+<div class="sec">Complete LLM system prompt — paste-ready</div>
+<div class="info">Variables in {{double braces}} are injected from user settings and duo preset before sending. The LLM outputs only a JSON array — no markdown, no explanation.</div>
+<div class="card"><div class="card-b">
+<div class="prompt-b">You are a short-form video script writer specialising in engaging duo dialogue reels.
+Generate a natural conversation between Speaker A and Speaker B on the given topic.
+Output ONLY a valid JSON array of ScriptLine objects — no markdown, no code fences, no preamble, no explanation.
+
+=== SPEAKER PERSONAS ===
+Speaker A: {{speaker_a_persona}}
+Speaker B: {{speaker_b_persona}}
+Tone: {{tone}}   (educational | debate | storytelling | comedy | interview)
+Language: {{language}}  (en | hi | hinglish | zh | es | fr | auto)
+
+=== FISH AUDIO PARAMETER GUIDE ===
+Each object in the array must have EXACTLY these fields:
+
+"id": "line_001" through "line_020" (zero-padded)
+"speaker": "A" or "B"
+"text": the spoken line, 8–25 words, natural speech contractions
+"emotion": one of exactly: neutral, happy, sad, angry, surprised, excited, whispering, shouting
+  → Match to dialogue content. Revelation moments = excited. Awe = whispering.
+  → Do NOT overuse excited. Vary across the script.
+  → Questions from an uncertain speaker = surprised. Confident claims = happy or neutral.
+"speaking_rate": float 0.75–1.25
+  → Fast energetic explanation = 1.1–1.2. Slow dramatic = 0.8. Normal = 1.0.
+  → Last 2 lines must be 0.82–0.88 for impactful ending.
+"pause_ms": integer 150–800
+  → After a question: 400–600. Punchline before a reveal: 600–800. Standard: 200–300.
+  → Use "..." in text for mid-sentence dramatic pauses; the TTS model handles them.
+"temperature": {{temp_a}} for A lines, {{temp_b}} for B lines (do not change these)
+"chunk_length": 200 (always exactly 200, do not change)
+"normalize": true (always exactly true, do not change)
+
+=== WRITING RULES ===
+1. Total lines: 14–20. Alternate A and B. No speaker has 3+ consecutive lines.
+2. Line 1: HOOK — surprising fact, bold claim, or "Did you know…" question.
+3. Each line ≤25 words. Split longer thoughts across 2 lines.
+4. Natural speech: contractions (it's, don't, you're), rhetorical questions, fillers (well, actually, wait—).
+5. Speaker A uses "whispering" for awe moments. Speaker B uses "excited" for reveals.
+6. Lines 1–3: fast pace (speaking_rate 1.05–1.15). Lines 4–12: varied. Last 2 lines: 0.82–0.88.
+7. End with a memorable closing that invites the viewer to think or share.
+8. NEVER include profanity, real names, copyrighted quotes, or medical/legal advice.
+9. NEVER output anything outside the JSON array — not even a newline before [.
+
+=== OUTPUT FORMAT ===
+[
+  {"id":"line_001","speaker":"A","text":"...","emotion":"excited","speaking_rate":1.1,"pause_ms":250,"temperature":{{temp_a}},"chunk_length":200,"normalize":true},
+  {"id":"line_002","speaker":"B","text":"...","emotion":"surprised","speaking_rate":1.0,"pause_ms":350,"temperature":{{temp_b}},"chunk_length":200,"normalize":true}
+]</div>
+</div></div>
+<div class="two">
+  <div class="card"><div class="card-h">Variables to inject</div><div class="card-b"><div class="code">topic:             user's input text
+speaker_a_persona: from selected duo preset
+speaker_b_persona: from selected duo preset
+tone:              user-selected tone
+language:          from user profile setting
+temp_a:            voice pack A recommended temp (default 0.7)
+temp_b:            voice pack B recommended temp (default 0.7)</div></div></div>
+  <div class="card"><div class="card-h">Post-processing (always apply)</div><div class="card-b">
+    <div class="row" style="padding:5px 0"><div class="rl"><strong>Strip</strong> any text before [ or after ] before JSON.parse.</div></div>
+    <div class="row" style="padding:5px 0"><div class="rl"><strong>Validate</strong> every required field present. Fill defaults: emotion→neutral, rate→1.0, pause→250, temp→0.7.</div></div>
+    <div class="row" style="padding:5px 0"><div class="rl"><strong>Cap</strong> text at 30 words — auto-split lines that overflow.</div></div>
+    <div class="row" style="padding:5px 0;border:none"><div class="rl"><strong>Reject</strong> arrays with fewer than 8 lines — re-call LLM with temperature +0.1 and retry once.</div></div>
+  </div></div>
+</div>
+</div>
+
+<!-- ===== REMOTION LAMBDA ===== -->
+<div class="panel" id="tab-remotion">
+<div class="sec">Remotion Lambda — cost, setup, and composition</div>
+<div class="succ">Cost per 2-min 720p render: ~$0.03–0.05. Render time: ~25–35 sec. Free tier covers ~10,000 renders/month in Lambda compute alone. S3 same-region transfers cost $0.</div>
+<div class="two">
+  <div class="card"><div class="card-h">One-time setup (run once)</div><div class="card-b"><div class="code">npm i -g @remotion/lambda
+
+# 1. Print and apply IAM policy
+npx remotion lambda policies print
+# → paste into AWS IAM policy attached to your user
+
+# 2. Set credentials
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=ap-south-1
+
+# 3. Deploy Lambda function
+npx remotion lambda functions deploy \
+  --memory=2048 --disk=10240 --timeout=120
+# → saves function ARN
+
+# 4. Deploy Remotion bundle to S3
+npx remotion lambda sites create \
+  --site-name=svgen-reel
+# → save the serve URL to .env as REMOTION_SERVE_URL</div></div></div>
+  <div class="card"><div class="card-h">renderMediaOnLambda call from Next.js</div><div class="card-b"><div class="code">import { renderMediaOnLambda,
+         getRenderProgress } from "@remotion/lambda/client";
+
+const { renderId, bucketName } = await renderMediaOnLambda({
+  region: process.env.AWS_REGION,
+  functionName: process.env.REMOTION_FUNCTION_NAME,
+  serveUrl: process.env.REMOTION_SERVE_URL,
+  composition: "ReelComposition",
+  inputProps: buildInputProps(job), // see below
+  codec: "h264",
+  imageFormat: "jpeg",
+  maxRetries: 2,
+  framesPerLambda: 12,
+  privacy: "private",
+  deleteAfter: "7-days",
+  outName: `final_720p.mp4`,
+  downloadBehavior: { type:"play-in-browser" },
+});
+// Store renderId + bucketName in DB job record
+// Poll getRenderProgress() every 3 sec</div></div></div>
+</div>
+<div class="sec sec-gap">ReelComposition inputProps structure</div>
+<div class="card"><div class="card-b"><div class="code">interface ReelCompositionProps {
+  audioSrc: string;         // presigned GET URL for master.wav
+  backgroundSrc: string;    // R2 or S3 URL for background clip
+  wordTimings: WordTiming[]; // [{word,start,end,speaker}]
+  scriptLines: ScriptLine[]; // with startSec + endSec added after TTS
+  speakerA: {
+    label: string; stickerUrl: string;
+    color: string; position: "top";
+  };
+  speakerB: {
+    label: string; stickerUrl: string;
+    color: string; position: "bottom";
+  };
+  subtitleStyle: SubtitleStyleId; // "pop-highlight"|"word-fade"|"karaoke"...
+  editConfig: {
+    stickerAnim: "bounce"|"slide"|"float"|"pulse"|"shake"|"static";
+    subtitleFont: string;    subtitleSize: number;
+    subtitleFill: string;    subtitleStroke: string;
+    subtitleHighlight: string; subtitleY: number;
+    bgDimOpacity: number;    bgColorOverlay: string|null;
+    bgBlendMode: string;     speakerLayout: "top-bottom"|"left-right";
+    stickerSizeA: number;    stickerSizeB: number;
+    stickerShape: "circle"|"rounded-square"|"hexagon";
+    introAnim: "none"|"zoom-in"|"slide-up"|"fade";
+    animSpeed: number;       showProgressBar: boolean;
+    ctaText: string|null;    ctaStartSec: number;
+    reactionStickers: ReactionSticker[]; // [{emoji,x,y,wordId,anim}]
+  };
+  resolution: "720p" | "480p";
+}</div></div></div>
+<div class="sec sec-gap">Background video sync — Remotion native</div>
+<div class="two">
+  <div class="card"><div class="card-h">Clip longer than audio → trim</div><div class="card-b"><div class="code">// OffthreadVideo with endAt trims automatically
+&lt;OffthreadVideo
+  src={backgroundSrc}
+  style={{objectFit:"cover",width:"100%",height:"100%"}}
+  endAt={durationInFrames}  // cuts at exact audio end
+  muted
+/&gt;</div></div></div>
+  <div class="card"><div class="card-h">Audio longer than clip → loop</div><div class="card-b"><div class="code">// loop prop repeats clip seamlessly
+&lt;OffthreadVideo
+  src={backgroundSrc}
+  style={{objectFit:"cover",width:"100%",height:"100%"}}
+  loop={true}               // loops until durationInFrames
+  endAt={durationInFrames}
+  muted
+/&gt;
+// Remotion handles both cases with same component.
+// No FFmpeg preprocessing needed.</div></div></div>
+</div>
+</div>
+
+<!-- ===== STICKERS ===== -->
+<div class="panel" id="tab-stickers">
+<div class="sec">Speaker sticker system</div>
+<div class="card"><div class="card-h">SpeakerSticker component — full implementation spec</div><div class="card-b">
+  <div class="row"><div class="rl"><strong>Active/idle state:</strong> getActiveSpeaker(frame, fps, scriptLines) returns "A"|"B"|null by checking current frame against each line's startSec–endSec range.</div></div>
+  <div class="row"><div class="rl"><strong>Glow ring:</strong> Pulsing ring around sticker image when speaking. interpolate(frame % 20, [0,10,20], [0.6,1,0.6]) for opacity. Color matches speaker.color. Idle ring: opacity 0.</div></div>
+  <div class="row"><div class="rl"><strong>Name tag:</strong> spring({frame: frameSinceSpeechStart, fps:30, config:{damping:12}}) for scale/opacity. Slides up from below the sticker when speaker becomes active. Fades on handoff.</div></div>
+  <div class="row"><div class="rl"><strong>Sticker shapes:</strong> Circle (default, borderRadius:50%), Rounded-square (borderRadius:24%), Hexagon (CSS clip-path polygon). User picks in editor.</div></div>
+</div></div>
+<div class="sec sec-gap">Animation modes</div>
+<div class="three">
+  <div class="card"><div class="card-h"><span class="badge bg">Bounce</span></div><div class="card-b">spring() scale on each line start. interpolate to 1.08× then back to 1.0 over 8 frames. Classic podcast reel. Default.</div></div>
+  <div class="card"><div class="card-h"><span class="badge bb">Slide-in</span></div><div class="card-b">translateX from ±120px to 0 on speech start. translateX back to ±120px on handoff. spring() damping 14.</div></div>
+  <div class="card"><div class="card-h"><span class="badge bp">Zoom pulse</span></div><div class="card-b">Slow interpolate from 1.0 to 1.06 over 30 frames while speaking. Snaps back on idle. Dramatic feel.</div></div>
+  <div class="card"><div class="card-h"><span class="badge ba">Float</span></div><div class="card-b">Math.sin(frame * 0.08) * 6 → y-axis oscillation while speaking. Zero movement when idle. Calm/gentle.</div></div>
+  <div class="card"><div class="card-h"><span class="badge br">Shake</span></div><div class="card-b">Random x offset ±4px for first 6 frames on line start. High energy/comedy. Uses seeded random from line ID.</div></div>
+  <div class="card"><div class="card-h"><span class="badge bt">Static</span></div><div class="card-b">No movement. Both stickers always visible. Only indicator is glow ring opacity. Clean minimalist look.</div></div>
+</div>
+<div class="sec sec-gap">Overlay system</div>
+<div class="two">
+  <div class="card"><div class="card-h">Reaction stickers (timed)</div><div class="card-b">
+    <div class="row" style="padding:5px 0"><div class="rl"><strong>Placement:</strong> User taps a word in the script editor → picks an emoji → it appears at that word's timestamp in the video.</div></div>
+    <div class="row" style="padding:5px 0"><div class="rl"><strong>Animations:</strong> pop-fade (scale 0→1.4→1, then fade out over 45 frames), fly-in (translate from edge), bounce-out (scale down and disappear).</div></div>
+    <div class="row" style="padding:5px 0;border:none"><div class="rl"><strong>Remotion:</strong> Wrapped in &lt;Sequence from={wordFrame} durationInFrames={45}&gt;. Frame-accurate. Max 6 reaction stickers per video.</div></div>
+  </div></div>
+  <div class="card"><div class="card-h">Structural overlays</div><div class="card-b">
+    <div class="row" style="padding:5px 0"><div class="rl"><strong>Progress bar:</strong> Thin 4px bar at top. interpolate(frame, [0, durationInFrames], [0, 720]) → width in px. Color = speakerA.color.</div></div>
+    <div class="row" style="padding:5px 0"><div class="rl"><strong>Topic header:</strong> Slides down from top at frame 0, fades out at frame 75 (2.5 sec). Shows video topic text.</div></div>
+    <div class="row" style="padding:5px 0;border:none"><div class="rl"><strong>CTA end card:</strong> &lt;Sequence from={durationInFrames - 60}&gt; shows a styled overlay with user's CTA text. Fades in over 15 frames.</div></div>
+  </div></div>
+</div>
+</div>
+
+<!-- ===== EDITING OPTIONS ===== -->
+<div class="panel" id="tab-editing">
+<div class="sec">Remotion Player browser editor — all controls</div>
+<div class="card"><div class="card-h">Subtitle style presets (8 options)</div><div class="card-b" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+  <span style="background:var(--color-background-secondary);border-radius:20px;padding:4px 11px;font-size:11.5px;color:var(--color-text-primary)">Pop highlight — active word turns colour+bold</span>
+  <span style="background:var(--color-background-secondary);border-radius:20px;padding:4px 11px;font-size:11.5px;color:var(--color-text-primary)">Word-by-word fade in</span>
+  <span style="background:var(--color-background-secondary);border-radius:20px;padding:4px 11px;font-size:11.5px;color:var(--color-text-primary)">Karaoke underline sweep</span>
+  <span style="background:var(--color-background-secondary);border-radius:20px;padding:4px 11px;font-size:11.5px;color:var(--color-text-primary)">Full sentence reveal</span>
+  <span style="background:var(--color-background-secondary);border-radius:20px;padding:4px 11px;font-size:11.5px;color:var(--color-text-primary)">Typewriter per word</span>
+  <span style="background:var(--color-background-secondary);border-radius:20px;padding:4px 11px;font-size:11.5px;color:var(--color-text-primary)">Background pill per word</span>
+  <span style="background:var(--color-background-secondary);border-radius:20px;padding:4px 11px;font-size:11.5px;color:var(--color-text-primary)">Drop shadow cinematic</span>
+  <span style="background:var(--color-background-secondary);border-radius:20px;padding:4px 11px;font-size:11.5px;color:var(--color-text-primary)">Outline stroke bold</span>
+</div></div>
+<div class="four">
+  <div class="card"><div class="card-h">Text</div><div class="card-b" style="font-size:11.5px;line-height:1.8">Font family (6 curated)<br>Font size 32–80px<br>Fill colour<br>Stroke colour + width 0–6px<br>Highlight colour (active word)<br>Vertical position 20–80%</div></div>
+  <div class="card"><div class="card-h">Background</div><div class="card-b" style="font-size:11.5px;line-height:1.8">Background clip picker<br>Dim overlay 0–80%<br>Colour tint overlay<br>Blend mode (multiply/screen)<br>Loop or trim (auto)<br>Custom upload</div></div>
+  <div class="card"><div class="card-h">Stickers</div><div class="card-b" style="font-size:11.5px;line-height:1.8">Animation mode (6 options)<br>Animation speed 0.5–2×<br>Size 80–200px per speaker<br>Shape (circle/sq/hex)<br>Colour per speaker<br>Custom sticker upload</div></div>
+  <div class="card"><div class="card-h">Layout & FX</div><div class="card-b" style="font-size:11.5px;line-height:1.8">Speaker layout (top-bottom / L-R)<br>Intro animation (4 options)<br>Progress bar on/off<br>Topic header on/off<br>CTA end card text<br>Reaction sticker placement</div></div>
+</div>
+<div class="card" style="margin-top:9px"><div class="card-h">Script & timing editor</div><div class="card-b">
+  <div class="row"><div class="rl"><strong>Inline script editing:</strong> Each line shows text + emotion + speaking_rate + pause_ms as editable fields. Change any field → update job record. Changed lines re-run TTS only for that line on next render (delta re-TTS).</div></div>
+  <div class="row"><div class="rl"><strong>Word timing adjustment:</strong> Drag word start/end times left or right in a timeline view. Adjusts the words.json transcript used by Remotion for subtitle sync. Bypasses re-TTS entirely.</div></div>
+  <div class="row"><div class="rl"><strong>Preview vs final:</strong> Remotion Player in browser = exact same React components used by Lambda render. What you see in the preview is what you get in the final MP4.</div></div>
+  <div class="row"><div class="rl"><strong>Resolution toggle:</strong> Switch between 480p (draft, fast) and 720p (final) before triggering the Lambda render. Draft costs ~40% of final render.</div></div>
+</div></div>
+</div>
+
+<!-- ===== API SURFACE ===== -->
+<div class="panel" id="tab-api">
+<div class="sec">Next.js API routes (App Router)</div>
+<div class="card"><div class="card-b">
+  <div class="api-r"><span class="m mP">POST</span><span class="ap">/api/auth/provision</span><span class="ad">Create user_id + S3 bucket on first Google login</span></div>
+  <div class="api-r"><span class="m mP">POST</span><span class="ap">/api/script/generate</span><span class="ad">LLM dialogue generation with full Fish Audio params</span></div>
+  <div class="api-r"><span class="m mP">POST</span><span class="ap">/api/jobs</span><span class="ad">Create job, generate presigned S3 PUTs, dispatch to Colab or fish.audio</span></div>
+  <div class="api-r"><span class="m mG">GET</span><span class="ap">/api/jobs/:id</span><span class="ad">Poll status — voice stage + render progress via getRenderProgress()</span></div>
+  <div class="api-r"><span class="m mG">GET</span><span class="ap">/api/jobs/:id/result</span><span class="ad">Generate 1-hour presigned GET URL for final video</span></div>
+  <div class="api-r"><span class="m mG">GET</span><span class="ap">/api/jobs</span><span class="ad">Job history list — last 20 jobs for logged-in user</span></div>
+  <div class="api-r"><span class="m mP">POST</span><span class="ap">/api/tts/fish</span><span class="ad">Fish.audio API proxy — BYOK key, uploads audio to user S3</span></div>
+  <div class="api-r"><span class="m mP">POST</span><span class="ap">/api/voice/refs</span><span class="ad">Upload reference clips → store in user S3, return s3Key</span></div>
+  <div class="api-r"><span class="m mP">POST</span><span class="ap">/api/voice/encode</span><span class="ad">Trigger Colab to encode ref clip → cache prompt_tokens, return cache_key</span></div>
+  <div class="api-r"><span class="m mP">POST</span><span class="ap">/api/render/trigger</span><span class="ad">Manually trigger Lambda render (after voice_done)</span></div>
+  <div class="api-r"><span class="m mG">GET</span><span class="ap">/api/render/health</span><span class="ad">Verify Lambda function deployed, return function ARN</span></div>
+  <div class="api-r"><span class="m mP">POST</span><span class="ap">/api/drive/export</span><span class="ad">Copy final video from S3 to user Google Drive</span></div>
+  <div class="api-r"><span class="m mD">DELETE</span><span class="ap">/api/jobs/:id</span><span class="ad">Delete job record + all associated S3 objects</span></div>
+  <div class="api-r"><span class="m mG">GET</span><span class="ap">/api/voices/presets</span><span class="ad">Return preset voice registry JSON</span></div>
+  <div class="api-r"><span class="m mG">GET</span><span class="ap">/api/assets/packs</span><span class="ad">Return asset pack registry (backgrounds, sticker packs)</span></div>
+</div></div>
+<div class="sec sec-gap">Colab FastAPI routes</div>
+<div class="card"><div class="card-b">
+  <div class="api-r"><span class="m mG">GET</span><span class="ap">/health</span><span class="ad">Liveness + model load status + GPU memory</span></div>
+  <div class="api-r"><span class="m mP">POST</span><span class="ap">/voice/job</span><span class="ad">Accept VoiceJobRequest → generate audio + transcript → upload to S3</span></div>
+  <div class="api-r"><span class="m mG">GET</span><span class="ap">/voice/job/{jobId}</span><span class="ad">Stage + progressPct + error message if failed</span></div>
+  <div class="api-r"><span class="m mP">POST</span><span class="ap">/voice/encode-ref</span><span class="ad">Download ref clip from S3 URL, encode prompt_tokens, return cache_key</span></div>
+  <div class="api-r"><span class="m mD">DELETE</span><span class="ap">/voice/cache/{key}</span><span class="ad">Clear cached speaker tokens</span></div>
+</div></div>
+</div>
+
+<!-- ===== EDGE CASES ===== -->
+<div class="panel" id="tab-edge">
+<div class="sec">Complete edge case handling</div>
+<div class="card"><div class="card-h">Voice stage failures</div><div class="card-b">
+  <div class="ec-row"><div class="ec-cat">Colab offline</div><div class="ec-body"><strong>Colab URL not reachable / tunnel expired</strong>Show "Colab session expired" banner with retry button + link to notebook. Fallback offer: "Switch to Fish.audio API mode for this job." Store last-known Colab health timestamp; warn user if &gt;2h since last ping.</div></div>
+  <div class="ec-row"><div class="ec-cat">Model OOM</div><div class="ec-body"><strong>Fish S2-Pro runs out of VRAM on Colab T4</strong>Colab returns {stage:"model_oom"}. App shows "GPU memory full — restart Colab runtime" with a link to the notebook. Suggest switching to fish-speech-1.4 (lighter, ~2.5 GB VRAM) in voice settings.</div></div>
+  <div class="ec-row"><div class="ec-cat">TTS partial fail</div><div class="ec-body"><strong>Some lines generated, others failed mid-job</strong>Colab saves successfully generated lines to S3 before the failure. App detects which lines are missing from S3. User can re-run TTS for failed lines only (delta re-TTS). No need to redo the full job.</div></div>
+  <div class="ec-row"><div class="ec-cat">Fish API error</div><div class="ec-body"><strong>fish.audio returns 401, 429, or 5xx</strong>401: "Invalid Fish.audio API key — update in settings." 429: exponential backoff 1s, 2s, 4s × 3 attempts, then "Fish.audio rate limit — try again in 60 sec." 5xx: retry 2× then "Fish.audio service unavailable — try Colab mode."</div></div>
+  <div class="ec-row"><div class="ec-cat">Bad ref clip</div><div class="ec-body"><strong>User uploads a noisy, short, or music-heavy reference clip</strong>Validate clip on upload: duration &lt;3s → "Too short, 5+ seconds needed." SNR check via RMS analysis → warn if background noise detected. Clip duration &gt;30s → auto-trim to first 15s. Show audio waveform preview so user can verify before saving.</div></div>
+</div></div>
+<div class="card"><div class="card-h">Render stage failures</div><div class="card-b">
+  <div class="ec-row"><div class="ec-cat">Lambda timeout</div><div class="ec-body"><strong>Render exceeds 120 sec Lambda timeout</strong>This shouldn't happen for ≤3 min videos with framesPerLambda:12, but set maxRetries:2 in renderMediaOnLambda. On timeout: show "Render timed out — retry at 480p draft first to test composition, then re-render at 720p."</div></div>
+  <div class="ec-row"><div class="ec-cat">Lambda not deployed</div><div class="ec-body"><strong>REMOTION_FUNCTION_NAME not found in AWS region</strong>GET /api/render/health returns {status:"function_not_found"}. Dashboard shows "Remotion Lambda not set up" with a "Run setup" button that triggers the deploy script via a Next.js server action and shows live output.</div></div>
+  <div class="ec-row"><div class="ec-cat">Asset unreachable</div><div class="ec-body"><strong>Background clip URL returns 403/404 during render</strong>Remotion's Lambda will fail to load the asset. Wrap renderMediaOnLambda in try/catch. Parse the error for "Failed to fetch" with the URL. Return specific error: "Background clip unreachable — choose a different clip or upload your own." Default to a solid colour background fallback if no clip available.</div></div>
+  <div class="ec-row"><div class="ec-cat">S3 upload fail</div><div class="ec-body"><strong>Lambda can't PUT to user S3 bucket</strong>IAM role check: Lambda execution role must have s3:PutObject on svgen-*. Return "Render complete but upload failed — check IAM permissions." Offer manual download from Lambda temp storage (Remotion stores render output in its own bucket temporarily).</div></div>
+</div></div>
+<div class="card"><div class="card-h">LLM + script failures</div><div class="card-b">
+  <div class="ec-row"><div class="ec-cat">Invalid JSON</div><div class="ec-body"><strong>LLM returns markdown-wrapped or truncated JSON</strong>Strip everything before [ and after ] before parsing. On parse failure: retry once with "Your previous response was not valid JSON. Output ONLY the raw JSON array." prepended. After 2 failures: show "Script generation failed — try a shorter topic or different LLM model."</div></div>
+  <div class="ec-row"><div class="ec-cat">Bad LLM key</div><div class="ec-body"><strong>LLM API returns 401 or 403</strong>Immediately surface "Invalid LLM API key" in the job form — validate the key on settings save, not at job time, by sending a cheap 5-token test prompt.</div></div>
+  <div class="ec-row"><div class="ec-cat">Short output</div><div class="ec-body"><strong>LLM returns fewer than 8 lines</strong>Post-processing rejects it. Retry once with temperature +0.1. If still short: show a warning "Script is shorter than ideal — continue anyway or regenerate."</div></div>
+</div></div>
+<div class="card"><div class="card-h">S3 + auth edge cases</div><div class="card-b">
+  <div class="ec-row"><div class="ec-cat">Bucket exists</div><div class="ec-body"><strong>S3 bucket name already taken on first login (UUID collision)</strong>Extremely unlikely but handle: catch BucketAlreadyExists on createBucket, generate a new UUID, retry once. After 2 failures, use user UUID + timestamp suffix.</div></div>
+  <div class="ec-row"><div class="ec-cat">Presigned expiry</div><div class="ec-body"><strong>User sits on the editor for &gt;15 min before triggering render</strong>Presigned PUT URLs expire after 15 min. On job dispatch, check age of job record. If &gt;12 min old: silently regenerate new presigned URLs before dispatching to Colab. User never sees the error.</div></div>
+  <div class="ec-row"><div class="ec-cat">Video expired</div><div class="ec-body"><strong>User tries to download a video after the 7-day S3 expiry</strong>Server checks if s3Key still exists before generating a presigned GET URL. If not: show "This video has expired. Re-render to generate a new copy." Job script and voice refs are still in S3 (30-day expiry) — offer one-click re-render skipping voice stage.</div></div>
+  <div class="ec-row"><div class="ec-cat">Drive auth</div><div class="ec-body"><strong>Google Drive OAuth token expired</strong>Catch 401 on Drive upload. Redirect user to re-authorize Drive scope. Offer to keep the S3 video available for 24 more hours as a backup while they re-auth.</div></div>
+</div></div>
+</div>
+
+<!-- ===== BUILD ORDER ===== -->
+<div class="panel" id="tab-build">
+<div class="sec">Phased build order — 6 weeks to production</div>
+<div class="phase-wrap">
+  <div class="phase-c"><div class="phase-h" style="color:var(--color-text-success)">Week 1 — Voice pipeline baseline</div>
+    <div class="pitem"><strong>1a. Colab notebook: Fish S2-Pro</strong>Install fish-speech-1.5, run single-speaker TTS, confirm 44.1kHz WAV output. Verify Colab T4 VRAM fits (~4GB used).</div>
+    <div class="pitem"><strong>1b. faster-whisper word timestamps</strong>Run on generated audio → words.json [{word,start,end}]. Verify accuracy on 2-min sample.</div>
+    <div class="pitem"><strong>1c. FastAPI server + Cloudflare Tunnel</strong>Expose /health and /voice/job endpoints. Test from Next.js dev server.</div>
+    <div class="pitem"><strong>1d. S3 presigned upload from Colab</strong>Upload audio + transcript to test S3 bucket. Verify ACL and lifecycle rules apply.</div>
+  </div>
+  <div class="phase-c"><div class="phase-h" style="color:var(--color-text-info)">Week 2 — Remotion Lambda baseline</div>
+    <div class="pitem"><strong>2a. Remotion setup + Lambda deploy</strong>npx remotion lambda functions deploy to ap-south-1. Deploy bundle site. Test render with static Hello World composition.</div>
+    <div class="pitem"><strong>2b. ReelComposition MVP</strong>BackgroundLayer (loop+trim), Audio, two static SpeakerSticker images, basic word-level subtitles from hardcoded words.json.</div>
+    <div class="pitem"><strong>2c. Full E2E: Colab → S3 → Lambda → S3</strong>Voice job → audio in S3 → trigger Lambda with presigned S3 GET URLs → final.mp4 in S3 → presigned delivery URL. Measure cost and render time.</div>
+  </div>
+  <div class="phase-c"><div class="phase-h" style="color:var(--color-text-warning)">Week 3 — Auth + dashboard</div>
+    <div class="pitem"><strong>3a. Next.js + NextAuth Google login</strong>App Router setup. Google OAuth. User table. S3 bucket provision on first login.</div>
+    <div class="pitem"><strong>3b. Settings page</strong>Colab URL input + health check. Fish.audio API key input + validation. LLM key input + test prompt. Drive OAuth connect.</div>
+    <div class="pitem"><strong>3c. Job creation form</strong>Duo picker, topic input, script generation, voice source selection per speaker. Store job in DB.</div>
+  </div>
+  <div class="phase-c"><div class="phase-h" style="color:var(--color-text-warning)">Week 4 — Browser editor</div>
+    <div class="pitem"><strong>4a. Remotion Player in Next.js</strong>Embed Remotion Player. Feed same inputProps as Lambda render. Real-time preview updates on config changes.</div>
+    <div class="pitem"><strong>4b. Subtitle style picker</strong>8 presets as selectable cards. Preview updates live.</div>
+    <div class="pitem"><strong>4c. Sticker config + reaction overlays</strong>Animation mode picker, size/colour controls, emoji tap-to-place on script transcript.</div>
+    <div class="pitem"><strong>4d. Script line editor</strong>Editable emotion, speaking_rate, pause_ms per line. Delta re-TTS on changed lines.</div>
+  </div>
+  <div class="phase-c"><div class="phase-h" style="color:var(--color-text-danger)">Week 5 — Voice modes + edge cases</div>
+    <div class="pitem"><strong>5a. Fish.audio API fallback path</strong>POST /api/tts/fish proxy. faster-whisper on separate process. Full job flow without Colab.</div>
+    <div class="pitem"><strong>5b. Custom ref clip upload + encoding</strong>Upload modal, S3 storage, Colab encode-ref endpoint, multi-clip token fusion, cache_key storage in DB.</div>
+    <div class="pitem"><strong>5c. Preset voice registry</strong>Registry JSON, UI pack cards with preview playback, Colab session caching, API mode model_id path.</div>
+    <div class="pitem"><strong>5d. All edge case handlers</strong>Colab offline, Lambda timeout, presigned URL expiry, expired video re-render, LLM JSON retry, Drive re-auth.</div>
+  </div>
+  <div class="phase-c"><div class="phase-h">Week 6 — Polish + monitoring</div>
+    <div class="pitem"><strong>6a. Job history + re-render</strong>Last 20 jobs list. One-click re-render (skip voice if audio cached). Delete job + S3 cleanup.</div>
+    <div class="pitem"><strong>6b. Progress UI</strong>Live stage label + progress bar. Queue position display. Estimated time remaining.</div>
+    <div class="pitem"><strong>6c. AWS billing guard</strong>CloudWatch alarm at $5/month. S3 Intelligent-Tiering on all buckets. Lambda cost logging per job stored in DB.</div>
+    <div class="pitem"><strong>6d. Monitoring</strong>Uptime health endpoint. Job success/failure rate dashboard. Colab session uptime tracking. Sentry error tracking on Next.js + Lambda.</div>
+  </div>
+</div>
+</div>
+
+<!-- ===== OPENCODE ===== -->
+<div class="panel" id="tab-opencode">
+<div class="sec">opencode CLI — setup and project context</div>
+<div class="succ">opencode is an open-source terminal AI coding agent. Install it, point it at your project, create AGENTS.md, then run each prompt below in sequence. It reads your files, writes code, runs commands, and iterates automatically.</div>
+<div class="two">
+  <div class="card"><div class="card-h">Install + authenticate</div><div class="card-b"><div class="code">curl -fsSL https://opencode.ai/install | bash
+# or: npm i -g opencode-ai@latest
+
+# Authenticate with Anthropic
+opencode auth login
+# Select: Anthropic → paste sk-ant-... key
+
+# Or via env var
+export ANTHROPIC_API_KEY=sk-ant-your-key
+opencode   # auto-detects</div></div></div>
+  <div class="card"><div class="card-h">Key commands</div><div class="card-b"><div class="code">opencode              # start interactive TUI
+opencode run "prompt" # headless one-shot
+opencode --continue   # resume last session
+/models               # switch model in session
+Tab                   # toggle plan↔build mode
+# plan mode = read-only analysis
+# build mode = full file edit + run commands</div></div></div>
+</div>
+<div class="sec sec-gap">Create AGENTS.md in your project root</div>
+<div class="card"><div class="card-b"><div class="prompt-b">## Project: svgen — Short Video Generator
+
+### Architecture
+- Next.js 14 App Router on Vercel (frontend + API)
+- Google Colab FastAPI server (Fish S2-Pro TTS only, BYOK GPU)
+- AWS Lambda + Remotion (video render engine, ~$0.03/video)
+- AWS S3 per-user buckets (svgen-{userId}, ap-south-1)
+- Postgres + Drizzle ORM for job/user state
+- Fish.audio API as Colab fallback (BYOK key)
+
+### Key files
+- /src/lib/s3.ts          — AWS S3 helpers (presigned URLs, bucket provision)
+- /src/lib/render.ts      — renderMediaOnLambda wrapper
+- /src/lib/voice.ts       — Fish S2-Pro Colab proxy + fish.audio API proxy
+- /src/lib/scriptGen.ts   — LLM script generation with Fish Audio params
+- /src/db/schema.ts       — Drizzle schema (users, jobs, voice_packs)
+- /remotion/index.tsx     — Remotion composition entry (ReelComposition)
+- /remotion/components/   — SubtitleLayer, SpeakerSticker, BackgroundLayer
+
+### Conventions
+- All S3 operations use presigned URLs — never expose bucket credentials to client
+- Job status enum: pending|voice_processing|voice_done|rendering|done|failed
+- Colab never holds AWS credentials — only receives presigned PUT URLs per job
+- All LLM API keys stored encrypted in DB (AES-256 via crypto lib)
+- TypeScript strict mode. Zod for all API input validation.
+- Resolution: 720×1280 (720p default), 480×854 (480p draft)
+
+### Environment variables
+DATABASE_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
+REMOTION_SERVE_URL, REMOTION_FUNCTION_NAME,
+NEXTAUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+ENCRYPTION_KEY</div></div></div>
+<div class="sec sec-gap">Prompts — run in order, one per session</div>
+<div class="card"><div class="card-h"><span class="badge bg">Prompt 1</span> Scaffold project</div><div class="card-b"><div class="prompt-b">Scaffold a new Next.js 14 App Router project. Install: drizzle-orm, drizzle-kit, @aws-sdk/client-s3, @aws-sdk/s3-request-presigner, next-auth, @remotion/lambda, remotion, @remotion/player, zod, bcryptjs. Create the full folder structure: /src/app, /src/lib/s3.ts (createUserBucket, presignedPut, presignedGet, deleteObject), /src/lib/render.ts (placeholder), /src/lib/voice.ts (placeholder), /src/lib/scriptGen.ts (placeholder), /src/db/schema.ts (users + jobs + voice_packs tables per AGENTS.md), /remotion/index.tsx (placeholder ReelComposition). Create .env.local.example with all vars from AGENTS.md.</div></div></div>
+<div class="card"><div class="card-h"><span class="badge bb">Prompt 2</span> S3 + auth + DB</div><div class="card-b"><div class="prompt-b">Implement Google OAuth login via NextAuth. On first login, call a provisionUser() function in /src/lib/s3.ts that: creates a UUID, creates S3 bucket named svgen-{uuid} in ap-south-1 with private ACL, sets lifecycle rules (audio/* + transcripts/* expire 30 days, videos/*/draft* expire 3 days, videos/*/final* expire 7 days), saves bucket name to users table. Subsequent logins skip provisioning if user record already exists. Build POST /api/auth/provision route and the NextAuth callback that calls it. Use Drizzle ORM for all DB operations.</div></div></div>
+<div class="card"><div class="card-h"><span class="badge bp">Prompt 3</span> ReelComposition</div><div class="card-b"><div class="prompt-b">Build the full Remotion ReelComposition in /remotion/ReelComposition.tsx. Accept all props from the ReelCompositionProps interface in AGENTS.md. Build sub-components: BackgroundLayer (OffthreadVideo with loop=true and endAt=durationInFrames), SpeakerSticker (active bounce animation via spring(), glow ring via interpolate(), name tag spring fade-in, all 6 animation modes controlled by editConfig.stickerAnim), SubtitleLayer (frame-accurate word-by-word rendering using wordTimings[], supporting all 8 subtitle style presets as separate render paths), ProgressBar (width interpolation from 0 to video width). Register the composition in /remotion/index.tsx as "ReelComposition" at 720×1280 30fps.</div></div></div>
+<div class="card"><div class="card-h"><span class="badge ba">Prompt 4</span> Voice + LLM pipeline</div><div class="card-b"><div class="prompt-b">Implement /src/lib/scriptGen.ts: generateScript() calls the user's BYOK LLM API (OpenAI-compatible client, baseURL from user settings) with the full system prompt from AGENTS.md. Post-process the response: strip non-JSON wrapper, validate all fields, fill defaults, split lines over 30 words, retry once on invalid JSON with temperature+0.1. Build POST /api/script/generate route. Then implement /src/lib/voice.ts: two exported functions — dispatchColabVoiceJob(job, presignedUrls) (POST to user's Colab /voice/job endpoint) and dispatchFishApiVoiceJob(job, userFishKey) (proxy TTS calls to fish.audio API, upload audio bytes to S3 via presigned PUTs). Build POST /api/jobs, GET /api/jobs/:id (including Lambda render trigger on voice_done via renderMediaOnLambda), and GET /api/jobs/:id/result routes.</div></div></div>
+<div class="card"><div class="card-h"><span class="badge br">Prompt 5</span> Edge cases + error handling</div><div class="card-b"><div class="prompt-b">Add comprehensive error handling across the entire app. Implement these specific cases: (1) Colab offline: detect in GET /api/jobs/:id polling, return user-readable stage message with fallback-to-fish-api offer. (2) Presigned URL expiry: in POST /api/jobs, check if regenerating URLs is needed if job is &gt;12 min old. (3) Lambda not deployed: GET /api/render/health checks getFunctions() and returns setup instructions. (4) S3 video expired: in GET /api/jobs/:id/result, check object existence before presigning, return re-render offer if missing. (5) LLM JSON failure: retry logic in scriptGen.ts with temperature bump. (6) Fish.audio 429 rate limit: exponential backoff 1s/2s/4s in voice.ts API mode. Add Zod validation on all API route inputs. Add try/catch with structured error objects {code, message, userMessage} on all async operations.</div></div></div>
+</div>
+</div>
+
+</div>
+<script>
+function T(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+  event.target.classList.add('on');
+  document.getElementById('tab-'+id).classList.add('on');
+}
+function V(id){
+  document.querySelectorAll('.so').forEach(o=>o.classList.remove('on'));
+  document.querySelectorAll('.vd').forEach(d=>d.classList.remove('on'));
+  event.target.classList.add('on');
+  document.getElementById('v-'+id).classList.add('on');
+}
+</script>

@@ -1,0 +1,183 @@
+import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import type { NextRequest } from "next/server";
+
+import { jobs } from "@/db/schema";
+import { decryptSecret } from "@/lib/crypto";
+import { db } from "@/lib/db";
+import { AppError, toErrorResponse } from "@/lib/errors";
+import { buildJobPresignedOutputs, normalizeCreateJobInput } from "@/lib/jobs";
+import { requireUserFromRequest } from "@/lib/session";
+import { dispatchColabVoiceJob, dispatchFishApiVoiceJob } from "@/lib/voice";
+
+export async function POST(request: NextRequest) {
+  try {
+    const user = await requireUserFromRequest(request);
+    const body = normalizeCreateJobInput(await request.json());
+
+    if (!user.s3Bucket) {
+      throw new AppError("bucket_missing", "User does not have a provisioned S3 bucket", "Your storage bucket is not ready yet. Sign out and back in to provision it.", 400);
+    }
+
+    const jobId = crypto.randomUUID();
+    const presigned = await buildJobPresignedOutputs({
+      bucket: user.s3Bucket,
+      jobId,
+      lineIds: body.scriptLines.map((line) => line.id),
+      region: user.s3Region,
+    });
+
+    const [createdJob] = await db
+      .insert(jobs)
+      .values({
+        id: jobId,
+        userId: user.id,
+        status: "pending",
+        stage: "Waiting for voice assets",
+        progressPct: 0,
+        scriptLines: body.scriptLines,
+        voiceMap: body.voiceMap,
+        editConfig: {
+          ...body.editConfig,
+          topic: body.topic,
+          duoId: body.duoId,
+        },
+        subtitleStyleId: body.subtitleStyleId,
+        backgroundUrl: body.backgroundUrl,
+        resolution: body.resolution,
+        s3AudioKeys: {
+          ...presigned.keys.audioFiles,
+          master: presigned.keys.masterAudio,
+        },
+        s3TranscriptKey: presigned.keys.transcriptJson,
+        s3VideoKey: presigned.keys.finalVideo,
+      })
+      .returning();
+
+    let nextJob = createdJob;
+    const voiceMode = String(body.voiceMap.mode ?? "fish-api");
+
+    try {
+      if (voiceMode === "colab") {
+        await dispatchColabVoiceJob(
+          {
+            jobId,
+            userId: user.id,
+            bucket: user.s3Bucket,
+            region: user.s3Region,
+            colabUrl: user.colabUrl ?? undefined,
+            lines: body.scriptLines,
+            speakerA: body.voiceMap.speakerA as Parameters<typeof dispatchColabVoiceJob>[0]["speakerA"],
+            speakerB: body.voiceMap.speakerB as Parameters<typeof dispatchColabVoiceJob>[0]["speakerB"],
+            presignedUrls: {
+              lines: presigned.urls.audioFiles,
+              master: presigned.urls.masterAudio,
+              transcript: presigned.urls.transcriptJson,
+            },
+          },
+          {
+            lines: presigned.urls.audioFiles,
+            master: presigned.urls.masterAudio,
+            transcript: presigned.urls.transcriptJson,
+          },
+        );
+
+        const [updatedJob] = await db
+          .update(jobs)
+          .set({
+            status: "voice_processing",
+            stage: "Colab accepted the voice job",
+            progressPct: 8,
+            updatedAt: new Date(),
+          })
+          .where(eq(jobs.id, jobId))
+          .returning();
+
+        nextJob = updatedJob;
+      } else {
+        const fishApiKey = decryptSecret(user.fishApiKey);
+
+        if (!fishApiKey) {
+          throw new AppError("fish_key_missing", "User has no Fish.audio key", "Add your Fish.audio API key in settings before starting the Fish voice pipeline.", 400);
+        }
+
+        await db
+          .update(jobs)
+          .set({
+            status: "voice_processing",
+            stage: "Generating voice assets with Fish.audio",
+            progressPct: 12,
+            updatedAt: new Date(),
+          })
+          .where(eq(jobs.id, jobId));
+
+        await dispatchFishApiVoiceJob(
+          {
+            jobId,
+            userId: user.id,
+            bucket: user.s3Bucket,
+            region: user.s3Region,
+            lines: body.scriptLines,
+            speakerA: body.voiceMap.speakerA as Parameters<typeof dispatchFishApiVoiceJob>[0]["speakerA"],
+            speakerB: body.voiceMap.speakerB as Parameters<typeof dispatchFishApiVoiceJob>[0]["speakerB"],
+            presignedUrls: {
+              lines: presigned.urls.audioFiles,
+              master: presigned.urls.masterAudio,
+              transcript: presigned.urls.transcriptJson,
+            },
+          },
+          fishApiKey,
+        );
+
+        const [updatedJob] = await db
+          .update(jobs)
+          .set({
+            status: "voice_done",
+            stage: "Voice assets ready",
+            progressPct: 60,
+            errorMessage: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(jobs.id, jobId))
+          .returning();
+
+        nextJob = updatedJob;
+      }
+    } catch (error) {
+      const errorMessage = error instanceof AppError ? error.userMessage : "Voice dispatch failed. Review your routing settings and try again.";
+
+      await db
+        .update(jobs)
+        .set({
+          status: "failed",
+          stage: "Voice dispatch failed",
+          progressPct: 0,
+          errorMessage,
+          updatedAt: new Date(),
+        })
+        .where(eq(jobs.id, jobId));
+
+      throw error;
+    }
+
+    return NextResponse.json({
+      job: nextJob,
+      presignedUrls: presigned.urls,
+    });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const user = await requireUserFromRequest(request);
+    const userJobs = await db.select().from(jobs).where(eq(jobs.userId, user.id));
+
+    return NextResponse.json({
+      jobs: userJobs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 20),
+    });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
