@@ -136,7 +136,7 @@ body,div,span,p{font-family:var(--font-sans)}
 <div class="sec">S3 per-user bucket structure</div>
 <div class="card"><div class="card-b">
 <div class="code">bucket: svgen-{userId}        (e.g. svgen-a3f9c1d2-8b1e-4c7a-...)
-region: ap-south-1            (Mumbai — lowest latency for India)
+region: ap-east-1            (Mumbai — lowest latency for India)
 
 /audio/{jobId}/
     line_001_A.wav            per-line WAV from Fish S2-Pro
@@ -166,7 +166,7 @@ videos/*/final_* → expire after 7 days
 voice-refs/* → never expire (user data)
 assets/* → never expire (user data)</div></div></div>
   <div class="card"><div class="card-h">Cost optimisation</div><div class="card-b">
-    <div class="row" style="padding:5px 0"><div class="rl"><strong>Same-region transfer free:</strong> Lambda in ap-south-1 reads S3 in ap-south-1 → $0 egress.</div></div>
+    <div class="row" style="padding:5px 0"><div class="rl"><strong>Same-region transfer free:</strong> Lambda in ap-east-1 reads S3 in ap-east-1 → $0 egress.</div></div>
     <div class="row" style="padding:5px 0"><div class="rl"><strong>Background clips on R2:</strong> Cloudflare R2 has free egress. Host background video packs there, not S3.</div></div>
     <div class="row" style="padding:5px 0;border:none"><div class="rl"><strong>IAM instance role:</strong> Lambda function role has s3:GetObject + s3:PutObject on svgen-* only. No long-lived keys.</div></div>
   </div></div>
@@ -415,7 +415,7 @@ npx remotion lambda policies print
 # 2. Set credentials
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
-export AWS_REGION=ap-south-1
+export AWS_REGION=ap-east-1
 
 # 3. Deploy Lambda function
 npx remotion lambda functions deploy \
@@ -630,7 +630,7 @@ const { renderId, bucketName } = await renderMediaOnLambda({
     <div class="pitem"><strong>1d. S3 presigned upload from Colab</strong>Upload audio + transcript to test S3 bucket. Verify ACL and lifecycle rules apply.</div>
   </div>
   <div class="phase-c"><div class="phase-h" style="color:var(--color-text-info)">Week 2 — Remotion Lambda baseline</div>
-    <div class="pitem"><strong>2a. Remotion setup + Lambda deploy</strong>npx remotion lambda functions deploy to ap-south-1. Deploy bundle site. Test render with static Hello World composition.</div>
+    <div class="pitem"><strong>2a. Remotion setup + Lambda deploy</strong>npx remotion lambda functions deploy to ap-east-1. Deploy bundle site. Test render with static Hello World composition.</div>
     <div class="pitem"><strong>2b. ReelComposition MVP</strong>BackgroundLayer (loop+trim), Audio, two static SpeakerSticker images, basic word-level subtitles from hardcoded words.json.</div>
     <div class="pitem"><strong>2c. Full E2E: Colab → S3 → Lambda → S3</strong>Voice job → audio in S3 → trigger Lambda with presigned S3 GET URLs → final.mp4 in S3 → presigned delivery URL. Measure cost and render time.</div>
   </div>
@@ -690,7 +690,7 @@ Tab                   # toggle plan↔build mode
 - Next.js 14 App Router on Vercel (frontend + API)
 - Google Colab FastAPI server (Fish S2-Pro TTS only, BYOK GPU)
 - AWS Lambda + Remotion (video render engine, ~$0.03/video)
-- AWS S3 per-user buckets (svgen-{userId}, ap-south-1)
+- AWS S3 per-user buckets (svgen-{userId}, ap-east-1)
 - Postgres + Drizzle ORM for job/user state
 - Fish.audio API as Colab fallback (BYOK key)
 
@@ -718,7 +718,7 @@ NEXTAUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
 ENCRYPTION_KEY</div></div></div>
 <div class="sec sec-gap">Prompts — run in order, one per session</div>
 <div class="card"><div class="card-h"><span class="badge bg">Prompt 1</span> Scaffold project</div><div class="card-b"><div class="prompt-b">Scaffold a new Next.js 14 App Router project. Install: drizzle-orm, drizzle-kit, @aws-sdk/client-s3, @aws-sdk/s3-request-presigner, next-auth, @remotion/lambda, remotion, @remotion/player, zod, bcryptjs. Create the full folder structure: /src/app, /src/lib/s3.ts (createUserBucket, presignedPut, presignedGet, deleteObject), /src/lib/render.ts (placeholder), /src/lib/voice.ts (placeholder), /src/lib/scriptGen.ts (placeholder), /src/db/schema.ts (users + jobs + voice_packs tables per AGENTS.md), /remotion/index.tsx (placeholder ReelComposition). Create .env.local.example with all vars from AGENTS.md.</div></div></div>
-<div class="card"><div class="card-h"><span class="badge bb">Prompt 2</span> S3 + auth + DB</div><div class="card-b"><div class="prompt-b">Implement Google OAuth login via NextAuth. On first login, call a provisionUser() function in /src/lib/s3.ts that: creates a UUID, creates S3 bucket named svgen-{uuid} in ap-south-1 with private ACL, sets lifecycle rules (audio/* + transcripts/* expire 30 days, videos/*/draft* expire 3 days, videos/*/final* expire 7 days), saves bucket name to users table. Subsequent logins skip provisioning if user record already exists. Build POST /api/auth/provision route and the NextAuth callback that calls it. Use Drizzle ORM for all DB operations.</div></div></div>
+<div class="card"><div class="card-h"><span class="badge bb">Prompt 2</span> S3 + auth + DB</div><div class="card-b"><div class="prompt-b">Implement Google OAuth login via NextAuth. On first login, call a provisionUser() function in /src/lib/s3.ts that: creates a UUID, creates S3 bucket named svgen-{uuid} in ap-east-1 with private ACL, sets lifecycle rules (audio/* + transcripts/* expire 30 days, videos/*/draft* expire 3 days, videos/*/final* expire 7 days), saves bucket name to users table. Subsequent logins skip provisioning if user record already exists. Build POST /api/auth/provision route and the NextAuth callback that calls it. Use Drizzle ORM for all DB operations.</div></div></div>
 <div class="card"><div class="card-h"><span class="badge bp">Prompt 3</span> ReelComposition</div><div class="card-b"><div class="prompt-b">Build the full Remotion ReelComposition in /remotion/ReelComposition.tsx. Accept all props from the ReelCompositionProps interface in AGENTS.md. Build sub-components: BackgroundLayer (OffthreadVideo with loop=true and endAt=durationInFrames), SpeakerSticker (active bounce animation via spring(), glow ring via interpolate(), name tag spring fade-in, all 6 animation modes controlled by editConfig.stickerAnim), SubtitleLayer (frame-accurate word-by-word rendering using wordTimings[], supporting all 8 subtitle style presets as separate render paths), ProgressBar (width interpolation from 0 to video width). Register the composition in /remotion/index.tsx as "ReelComposition" at 720×1280 30fps.</div></div></div>
 <div class="card"><div class="card-h"><span class="badge ba">Prompt 4</span> Voice + LLM pipeline</div><div class="card-b"><div class="prompt-b">Implement /src/lib/scriptGen.ts: generateScript() calls the user's BYOK LLM API (OpenAI-compatible client, baseURL from user settings) with the full system prompt from AGENTS.md. Post-process the response: strip non-JSON wrapper, validate all fields, fill defaults, split lines over 30 words, retry once on invalid JSON with temperature+0.1. Build POST /api/script/generate route. Then implement /src/lib/voice.ts: two exported functions — dispatchColabVoiceJob(job, presignedUrls) (POST to user's Colab /voice/job endpoint) and dispatchFishApiVoiceJob(job, userFishKey) (proxy TTS calls to fish.audio API, upload audio bytes to S3 via presigned PUTs). Build POST /api/jobs, GET /api/jobs/:id (including Lambda render trigger on voice_done via renderMediaOnLambda), and GET /api/jobs/:id/result routes.</div></div></div>
 <div class="card"><div class="card-h"><span class="badge br">Prompt 5</span> Edge cases + error handling</div><div class="card-b"><div class="prompt-b">Add comprehensive error handling across the entire app. Implement these specific cases: (1) Colab offline: detect in GET /api/jobs/:id polling, return user-readable stage message with fallback-to-fish-api offer. (2) Presigned URL expiry: in POST /api/jobs, check if regenerating URLs is needed if job is &gt;12 min old. (3) Lambda not deployed: GET /api/render/health checks getFunctions() and returns setup instructions. (4) S3 video expired: in GET /api/jobs/:id/result, check object existence before presigning, return re-render offer if missing. (5) LLM JSON failure: retry logic in scriptGen.ts with temperature bump. (6) Fish.audio 429 rate limit: exponential backoff 1s/2s/4s in voice.ts API mode. Add Zod validation on all API route inputs. Add try/catch with structured error objects {code, message, userMessage} on all async operations.</div></div></div>

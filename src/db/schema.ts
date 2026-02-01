@@ -30,7 +30,7 @@ export const users = pgTable("users", {
   image: text("image"),
   passwordHash: text("password_hash"),
   s3Bucket: text("s3_bucket"),
-  s3Region: text("s3_region").default("ap-south-1").notNull(),
+  s3Region: text("s3_region").default("ap-east-1").notNull(),
   colabUrl: text("colab_url"),
   colabHealthy: boolean("colab_healthy").default(false).notNull(),
   fishApiKey: text("fish_api_key"),

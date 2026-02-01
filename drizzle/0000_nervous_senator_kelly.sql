@@ -59,7 +59,7 @@ CREATE TABLE "users" (
 	"image" text,
 	"password_hash" text,
 	"s3_bucket" text,
-	"s3_region" text DEFAULT 'ap-south-1' NOT NULL,
+	"s3_region" text DEFAULT 'ap-east-1' NOT NULL,
 	"colab_url" text,
 	"colab_healthy" boolean DEFAULT false NOT NULL,
 	"fish_api_key" text,

@@ -18,7 +18,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { users } from "@/db/schema";
 import { db } from "@/lib/db";
 
-const DEFAULT_REGION = process.env.AWS_REGION ?? "ap-south-1";
+const DEFAULT_REGION = process.env.AWS_REGION ?? "ap-east-1";
 
 const getS3Client = (region = DEFAULT_REGION) => {
   return new S3Client({ region });

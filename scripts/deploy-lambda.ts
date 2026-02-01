@@ -1,18 +1,16 @@
-import {execFileSync} from "node:child_process";
+import { execFileSync } from "node:child_process";
 
-import {GetFunctionCommand, LambdaClient} from "@aws-sdk/client-lambda";
-import {getFunctions, getSites, type AwsRegion} from "@remotion/lambda/client";
+import { GetFunctionCommand, LambdaClient } from "@aws-sdk/client-lambda";
+import { getFunctions, getSites, type AwsRegion } from "@remotion/lambda/client";
 
-const region = (process.env.AWS_REGION ?? "ap-south-1") as AwsRegion;
+const region = (process.env.AWS_REGION ?? "ap-east-1") as AwsRegion;
 const siteName = "svgen-reel";
 
 const runRemotion = (args: string[]) => {
-  const isWindows = process.platform === "win32";
-  const command = isWindows ? "npx.cmd" : "npx";
-
-  execFileSync(command, ["remotion", ...args], {
+  execFileSync("npx", ["remotion", ...args], {
     stdio: "inherit",
     env: process.env,
+    shell: true,
   });
 };
 
@@ -65,7 +63,7 @@ const main = async () => {
     throw new Error(`Remotion site ${siteName} was not found after deployment.`);
   }
 
-  const lambdaClient = new LambdaClient({region});
+  const lambdaClient = new LambdaClient({ region });
   const lambdaDetails = await lambdaClient.send(
     new GetFunctionCommand({
       FunctionName: deployedFunction.functionName,

@@ -11,7 +11,7 @@ export const renderProgressRequestSchema = z.object({
 type JobRecord = typeof jobs.$inferSelect;
 
 const getRenderEnv = () => {
-  const region = process.env.AWS_REGION as "ap-south-1" | undefined;
+  const region = process.env.AWS_REGION as "ap-east-1" | undefined;
   const functionName = process.env.REMOTION_FUNCTION_NAME;
   const serveUrl = process.env.REMOTION_SERVE_URL;
 

@@ -32,7 +32,7 @@ export const voiceJobSchema = z.object({
   jobId: z.string().uuid(),
   userId: z.string().uuid(),
   bucket: z.string(),
-  region: z.string().default("ap-south-1"),
+  region: z.string().default("ap-east-1"),
   colabUrl: z.string().url().optional(),
   lines: z.array(generatedLineSchema).min(1),
   speakerA: jobSpeakerConfigSchema,

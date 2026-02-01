@@ -398,7 +398,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'ap-south-1'"
+          "default": "'ap-east-1'"
         },
         "colab_url": {
           "name": "colab_url",
