@@ -25,6 +25,9 @@ const monoFont = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Brainclip — Turn Any Idea Into Addictive Reels",
   description: "Type an idea, pick a format, choose AI voices, and get a polished short-form reel in minutes. No editing skills needed.",
+  verification: {
+    google: "vPdZ1rzMuka8gCZFKRMek5HX04b9Eu4VWJv7tSzcyQg",
+  },
 };
 
 type RootLayoutProps = Readonly<{
