@@ -16,15 +16,26 @@ export async function POST(request: NextRequest) {
       throw new AppError("llm_key_missing", "User is missing llmApiKey", "Add your LLM API key in settings before generating a script.", 400);
     }
 
+    let baseUrl = user.llmBaseUrl || "https://generativelanguage.googleapis.com/v1beta";
+    if (baseUrl.includes("api.openai.com") || baseUrl.includes("/v1beta/openai")) {
+      baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    }
+    
+    let model = user.llmModel || "gemini-1.5-flash";
+    if (model === "gpt-4o-mini" || model.includes("gpt")) {
+      model = "gemini-1.5-flash";
+    }
+
     const scriptLines = await generateScript({
       ...body,
       llmApiKey,
-      llmBaseUrl: user.llmBaseUrl ?? "https://api.openai.com/v1",
-      llmModel: user.llmModel ?? "gpt-4o-mini",
+      llmBaseUrl: baseUrl,
+      llmModel: model,
     });
 
     return NextResponse.json({ scriptLines });
   } catch (error) {
+    console.error("Script generation route error:", error);
     return toErrorResponse(error);
   }
 }

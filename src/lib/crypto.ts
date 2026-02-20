@@ -47,13 +47,13 @@ export const decryptSecret = (value: string | null | undefined) => {
   const key = getKey();
 
   if (!key) {
-    return value;
+    return null;
   }
 
-  const [, ivBase64, tagBase64, payloadBase64] = value.split(":");
+  const [, , ivBase64, tagBase64, payloadBase64] = value.split(":");
 
   if (!ivBase64 || !tagBase64 || !payloadBase64) {
-    return value;
+    return null;
   }
 
   try {
@@ -65,6 +65,6 @@ export const decryptSecret = (value: string | null | undefined) => {
     ]);
     return decrypted.toString("utf8");
   } catch {
-    return value;
+    return null;
   }
 };

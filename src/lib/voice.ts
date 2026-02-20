@@ -239,7 +239,7 @@ export const synthesizeFishAudioLine = async ({
 }) => {
   return fetchFishAudio(
     {
-      model_id: voiceId,
+      reference_id: voiceId,
       text,
       format: "wav",
       emotion,
@@ -299,7 +299,7 @@ export async function dispatchFishApiVoiceJob(job: VoiceJob, userFishKey: string
 
     const audioBuffer = await fetchFishAudio(
       {
-        model_id: speakerConfig.modelId,
+        reference_id: speakerConfig.modelId,
         text: line.text,
         format: "wav",
         chunk_length: line.chunk_length,

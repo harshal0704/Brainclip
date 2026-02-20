@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import { z } from "zod";
 
 import { AppError } from "@/lib/errors";
@@ -30,21 +29,27 @@ export const generatedScriptLineSchema = z.object({
 export const generateScriptParamsSchema = scriptRequestSchema.extend({
   llmApiKey: z.string().min(1),
   llmModel: z.string().min(1),
-  llmBaseUrl: z.string().url().optional().default("https://api.openai.com/v1"),
+  llmBaseUrl: z.string().url().optional().or(z.literal("")).transform(v => {
+    let url = v || "https://generativelanguage.googleapis.com/v1beta";
+    if (url === "https://generativelanguage.googleapis.com/v1beta/") {
+      url = "https://generativelanguage.googleapis.com/v1beta";
+    }
+    return url;
+  }),
 });
 
 export type ScriptRequest = z.infer<typeof scriptRequestSchema>;
 export type ScriptLine = z.infer<typeof generatedScriptLineSchema>;
 export type GenerateScriptParams = z.infer<typeof generateScriptParamsSchema>;
 
-const SYSTEM_PROMPT = `You are a short-form video script writer specialising in engaging duo dialogue reels.
-Generate a natural conversation between Speaker A and Speaker B on the given topic.
+const SYSTEM_PROMPT = `You are a master short-form video script writer specializing in highly engaging, viral duo dialogue reels.
+Generate a captivating, natural conversation between Speaker A and Speaker B on the given topic. The goal is maximum audience retention and engagement.
 Output ONLY a valid JSON array of ScriptLine objects. No markdown, no code fences, no preamble, no explanation.
 
 Each object in the array must include EXACTLY these fields:
 - id: line_001 through line_020
 - speaker: A or B
-- text: natural spoken line, 8-25 words, contractions allowed
+- text: natural spoken line, 5-20 words. Use contractions, slang if appropriate, filler words (like "Wait,", "Actually,"), and cut out fluff.
 - emotion: one of neutral, happy, sad, angry, surprised, excited, whispering, shouting
 - speaking_rate: float 0.75-1.25
 - pause_ms: integer 150-800
@@ -53,14 +58,15 @@ Each object in the array must include EXACTLY these fields:
 - normalize: always true
 
 Writing rules:
-1. Total lines: 14-20.
-2. Alternate speakers. No speaker has 3 or more consecutive lines.
-3. Line 1 is a hook: surprising fact, bold claim, or curiosity question.
-4. Lines 1-3 should feel fast. Last 2 lines should slow down to 0.82-0.88.
-5. Keep the language natural, memorable, and spoken aloud.
-6. End with a closing thought that invites the viewer to react, think, or share.
-7. Never include profanity, copyrighted quotes, or medical or legal advice.
-8. Return only the raw JSON array.`;
+1. Total lines: 12-18 lines for a punchy ~45 second video.
+2. Alternate clearly. Interruptions and quick back-and-forths are encouraged.
+3. Line 1 MUST be a massive hook: an unbelievable fact, a provocative question, or a strong hook statement. It must grab attention instantly.
+4. Pacing: Lines 1-4 should be very fast-paced (speaking rate 1.1 - 1.2, short pauses) to build momentum.
+5. Middle section: Introduce a turning point or conflict. Make the audience question what they know.
+6. The ending: Subvert expectations or drop a major realization. Last 2 lines should slow down dramatically (0.82-0.88, longer pauses) for impact. End on a cliffhanger, a call-to-action, or a thought-provoking final statement.
+7. Tone: conversational, high-energy, NEVER academic. Write like two friends arguing or sharing a mind-blowing secret.
+8. Never include profanity, copyrighted quotes, or medical/legal advice.
+9. Return ONLY the raw JSON array.`;
 
 const rawLineSchema = z.record(z.string(), z.unknown());
 const rawResponseSchema = z.array(rawLineSchema);
@@ -193,38 +199,75 @@ const normalizeScriptLines = (input: unknown, params: GenerateScriptParams): Scr
 };
 
 const callLlm = async (params: GenerateScriptParams, temperature = 0.7, retryInstruction?: string) => {
-  const client = new OpenAI({
-    apiKey: params.llmApiKey,
-    baseURL: params.llmBaseUrl,
-  });
+  const isGoogle = params.llmBaseUrl.includes("generativelanguage.googleapis.com");
+  const isGroq = params.llmBaseUrl.includes("groq.com");
 
-  const response = await client.chat.completions.create({
-    model: params.llmModel,
-    temperature,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: [
-          retryInstruction ?? "",
-          `Topic: ${params.topic}`,
-          `Speaker A persona: ${params.speakerAPersona}`,
-          `Speaker B persona: ${params.speakerBPersona}`,
-          `Tone: ${params.tone}`,
-          `Language: ${params.language}`,
-          `Speaker A default temperature: ${params.tempA}`,
-          `Speaker B default temperature: ${params.tempB}`,
-        ].filter(Boolean).join("\n"),
-      },
-    ],
-  });
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: [
+        retryInstruction ?? "",
+        `Topic: ${params.topic}`,
+        `Speaker A persona: ${params.speakerAPersona}`,
+        `Speaker B persona: ${params.speakerBPersona}`,
+        `Tone: ${params.tone}`,
+        `Language: ${params.language}`,
+        `Speaker A default temperature: ${params.tempA}`,
+        `Speaker B default temperature: ${params.tempB}`,
+      ].filter(Boolean).join("\n"),
+    },
+  ];
 
-  const content = response.choices[0]?.message?.content;
+  if (isGoogle) {
+    // Native Google AI Studio API
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${params.llmModel}:generateContent?key=${params.llmApiKey}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [{ role: "user", parts: [{ text: messages[1].content }] }],
+        generationConfig: { temperature, responseMimeType: "application/json" },
+      }),
+    });
 
-  if (!content) {
-    throw new AppError("llm_empty_response", "LLM returned an empty response", "Script generation returned no content.", 502);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new AppError("llm_api_error", `Google API Error ${response.status}: ${errorText}`, `Google API rejected the request. Please check your API key and model name. Error: ${errorText}`, response.status);
+    }
+
+    const data = await response.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!content) throw new AppError("llm_empty_response", "LLM returned empty response", "No content from AI Studio", 502);
+    return content;
   }
 
+  // Fallback to OpenAI compatible (Groq or other)
+  const baseUrl = params.llmBaseUrl || "https://api.groq.com/openai/v1";
+  const url = baseUrl.endsWith("/") ? `${baseUrl}chat/completions` : `${baseUrl}/chat/completions`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.llmApiKey}`,
+    },
+    body: JSON.stringify({
+      model: params.llmModel,
+      temperature,
+      messages,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new AppError("llm_api_error", `API Error ${response.status}: ${errorText}`, `API rejected the request. Please check your API key and model name. Error: ${errorText}`, response.status);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new AppError("llm_empty_response", "LLM returned empty response", "No content from API", 502);
   return content;
 };
 
@@ -240,6 +283,7 @@ export async function generateScript(input: GenerateScriptParams): Promise<Scrip
   try {
     return await attempt(0.7);
   } catch (error) {
+    console.error("===== LLM ERROR =====", error);
     if (error instanceof AppError) {
       if (["llm_invalid_json", "llm_invalid_line_count", "llm_invalid_speaker_order", "llm_line_too_long", "llm_invalid_line"].includes(error.code)) {
         try {
@@ -263,11 +307,39 @@ export async function generateScript(input: GenerateScriptParams): Promise<Scrip
       }
     }
 
+    if (error instanceof Error && error.message.includes("400")) {
+      throw new AppError(
+        "llm_bad_request",
+        error.message,
+        "LLM API rejected the request. If using Google AI Studio, ensure your API key is valid and your LLM Model is set to a supported model like 'gemini-1.5-flash' (not 'gpt-4o-mini').",
+        400,
+      );
+    }
+
+    if (error instanceof Error && error.message.includes("401")) {
+      throw new AppError(
+        "llm_unauthorized",
+        error.message,
+        "Script generation failed: Invalid API key. Please check your Studio Settings.",
+        401,
+      );
+    }
+
+    if (error instanceof Error && error.message.includes("404")) {
+      throw new AppError(
+        "llm_not_found",
+        error.message,
+        "Script generation failed: Model not found. If using Google AI Studio, ensure model is 'gemini-1.5-flash' and not 'gpt-4o-mini'.",
+        404,
+      );
+    }
+
     throw new AppError(
       "llm_failed",
       error instanceof Error ? error.message : "Unknown LLM error",
-      "Script generation failed. Please try a different topic or model.",
+      "Script generation failed. Please check your LLM URL, model name, and API key.",
       502,
     );
   }
 }
+

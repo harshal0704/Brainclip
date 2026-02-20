@@ -4,6 +4,7 @@ import {BackgroundLayer} from "./components/BackgroundLayer";
 import {ProgressBar} from "./components/ProgressBar";
 import {SpeakerSticker} from "./components/SpeakerSticker";
 import {SubtitleLayer} from "./components/SubtitleLayer";
+import {AudioVisualizer} from "./components/AudioVisualizer";
 import type {ReelCompositionProps, ScriptLine, SpeakerId} from "./types";
 
 const getActiveLine = (frame: number, fps: number, scriptLines: ScriptLine[]) => {
@@ -119,12 +120,32 @@ export const ReelComposition = (props: ReelCompositionProps) => {
   const activeSpeaker = getActiveSpeaker(frame, fps, props.scriptLines);
   const subtitleAccent = activeSpeaker === "B" ? props.speakerB.color : props.speakerA.color;
 
+  // Scene Transition (Fade & Slide up)
+  const introProgress = spring({
+    frame,
+    fps,
+    config: {damping: 14, stiffness: 100},
+    durationInFrames: 30,
+  });
+  
+  const sceneOpacity = interpolate(introProgress, [0, 1], [0, 1]);
+  const sceneTranslateY = interpolate(introProgress, [0, 1], [40, 0]);
+
   return (
-    <div style={{position: "absolute", inset: 0, backgroundColor: "#05080c", overflow: "hidden", color: "white"}}>
+    <div style={{
+      position: "absolute", 
+      inset: 0, 
+      backgroundColor: "#05080c", 
+      overflow: "hidden", 
+      color: "white",
+      opacity: sceneOpacity,
+      transform: `translateY(${sceneTranslateY}px)`,
+    }}>
       <BackgroundLayer backgroundSrc={props.backgroundSrc} bgDimOpacity={props.editConfig.bgDimOpacity} />
       {props.audioSrc ? <Audio src={props.audioSrc} /> : null}
 
       <ConversationOverlay activeSpeaker={activeSpeaker} speakerAColor={props.speakerA.color} speakerBColor={props.speakerB.color} />
+      <AudioVisualizer speakerAColor={props.speakerA.color} speakerBColor={props.speakerB.color} scriptLines={props.scriptLines} />
       <IntroBadge speakerAColor={props.speakerA.color} speakerBColor={props.speakerB.color} />
       <ProgressBar color={subtitleAccent} />
 

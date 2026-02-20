@@ -32,7 +32,7 @@ export const subtitleStyleSchema = z.enum([
   "pill",
 ]);
 
-export const stickerAnimSchema = z.enum(["bounce", "slide", "float", "pulse", "shake", "static"]);
+export const stickerAnimSchema = z.enum(["bounce", "slide", "float", "pulse", "shake", "static", "spin"]);
 
 export const fontFamilySchema = z.enum([
   "Inter",

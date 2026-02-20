@@ -9,43 +9,42 @@ import { duoPresets, subtitlePresetCatalog, voicePresetCatalog, assetPackCatalog
 const pillars = [
   {
     icon: "🎭",
-    title: "Duo Dialogue Engine",
-    body: "Two AI voices having a real conversation. Debate, interview, or explainer — formats engineered to keep viewers watching till the very last second.",
+    title: "Duo Dialogue",
+    body: "Two AI voices in conversation. Formats engineered for retention.",
     accent: "var(--accent)",
   },
   {
     icon: "🎙️",
-    title: "AI Voice Studio",
-    body: "Pick from expressive voice packs or clone your own. Every line is timed, tuned, and production-ready — no recording booth needed.",
+    title: "Voice Studio",
+    body: "Expressive voice packs or your own clone. Fully timed and tuned.",
     accent: "var(--sky)",
   },
   {
     icon: "⚡",
-    title: "One-Click Export",
-    body: "HD vertical reels rendered in the cloud. Ready to post on Instagram, TikTok, or YouTube Shorts in minutes, not hours.",
+    title: "1-Click Export",
+    body: "HD vertical reels rendered in the cloud. Ready to post instantly.",
     accent: "var(--accent-deep)",
   },
 ];
 
 const stats = [
-  { value: "60s", label: "Reel length", icon: "⏱" },
-  { value: "720p", label: "HD quality", icon: "📺" },
-  { value: "8+", label: "Voice packs", icon: "🎤" },
-  { value: "∞", label: "Ideas to reels", icon: "💡" },
+  { value: "60s", label: "Length", icon: "⏱" },
+  { value: "720p", label: "Quality", icon: "📺" },
+  { value: "8+", label: "Voices", icon: "🎤" },
+  { value: "∞", label: "Ideas", icon: "💡" },
 ];
 
 const steps = [
-  { title: "Describe your idea", body: "A topic, a hot take, a story — type it in one sentence. Brainclip writes the script." },
-  { title: "Pick a format", body: "Debate, explainer, host-guest, or something entirely your own." },
-  { title: "Choose your style", body: "Select voices, subtitle effects, and a visual direction that matches your brand." },
-  { title: "Edit & refine", body: "Review the AI-generated dialogue. Tweak any line, swap voices, adjust timing." },
-  { title: "Render & post", body: "Hit render. Your polished vertical reel is ready to download and post everywhere." },
+  { title: "Describe idea", body: "Type a topic. We write the script." },
+  { title: "Pick format", body: "Debate, explainer, or host-guest." },
+  { title: "Choose style", body: "Select voices and subtitle effects." },
+  { title: "Render & post", body: "Get your polished vertical reel." },
 ];
 
 const socialProof = [
-  { metric: "10x", label: "Faster than editing manually" },
-  { metric: "$0", label: "Cost per reel on free tier" },
-  { metric: "< 3 min", label: "Average time to first reel" },
+  { metric: "10x", label: "Faster" },
+  { metric: "$0", label: "Free tier" },
+  { metric: "< 3m", label: "To first reel" },
 ];
 
 /* ─── Scroll Animation Hook ─── */
@@ -116,9 +115,7 @@ export default function HomePage() {
             </h1>
 
             <p className="hero-subtitle animate-hero delay-2">
-              Type an idea. Pick a format. Choose AI voices. Get a scroll-stopping
-              short-form reel in minutes — no editing skills, no recording gear,
-              no complicated timeline.
+              Type an idea. Pick a format. Get a scroll-stopping short in minutes. No editing required.
             </p>
 
             <div className="hero-actions animate-hero delay-3">
@@ -164,7 +161,6 @@ export default function HomePage() {
             <div className="section-header reveal-on-scroll">
               <span className="section-tag">Features</span>
               <h2>From blank page to viral reel<br />in three moves.</h2>
-              <p className="section-sub">Each pillar is designed to eliminate one barrier between your idea and a finished reel.</p>
             </div>
 
             <div className="pillars-grid">
@@ -212,7 +208,6 @@ export default function HomePage() {
             <div className="section-header reveal-on-scroll">
               <span className="section-tag">Library</span>
               <h2>Start with a format. Make it yours.</h2>
-              <p className="section-sub">Everything you need to go from concept to finished reel, pre-built and customizable.</p>
             </div>
 
             <div className="library-grid">

@@ -152,7 +152,19 @@ export const SubtitleLayer = ({wordTimings, scriptLines, subtitleStyle, editConf
             key={word.key}
             style={{
               ...wordStyle(word),
-              transform: word.isActive ? `scale(${1 + pop * 0.12})` : "scale(1)",
+              display: "inline-block",
+              transform: word.isActive ? `scale(${1 + pop * 0.18}) rotate(${Math.sin(index * 1.5) * pop * 2}deg)` : "scale(1)",
+              textShadow: word.isActive 
+                ? `0 4px 12px ${accentColor}88, 0 8px 30px rgba(0,0,0,0.8)` 
+                : "0 8px 30px rgba(0,0,0,0.58)",
+              backgroundImage: word.isActive 
+                ? `linear-gradient(135deg, #ffffff 0%, ${accentColor} 100%)` 
+                : "none",
+              WebkitBackgroundClip: word.isActive ? "text" : "border-box",
+              WebkitTextFillColor: word.isActive ? "transparent" : "#f7f5ef",
+              color: word.isActive ? "transparent" : "#f7f5ef", // Fallback
+              filter: word.isActive ? `drop-shadow(0px 2px 4px rgba(0,0,0,0.5))` : "none",
+              transition: "transform 0.1s ease-out",
             }}
           >
             {word.word}

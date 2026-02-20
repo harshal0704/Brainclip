@@ -53,6 +53,7 @@ export const SpeakerSticker = ({speakerId, speaker, activeLine, isActive, editCo
   let translateX = 0;
   let translateY = 0;
   let scale = isActive ? 1 + emphasis * 0.08 : 0.94;
+  let rotation = 0;
 
   switch (editConfig.stickerAnim) {
     case "slide":
@@ -68,6 +69,17 @@ export const SpeakerSticker = ({speakerId, speaker, activeLine, isActive, editCo
             extrapolateRight: "clamp",
           })
         : 0.96;
+      break;
+    case "bounce":
+      translateY = isActive ? interpolate(emphasis, [0, 0.5, 1], [0, -20, 0]) : 0;
+      scale = isActive ? 1 + emphasis * 0.15 : 0.94;
+      break;
+    case "spin":
+      scale = isActive ? 1.1 : 0.94;
+      rotation = isActive ? interpolate(frameSinceSpeechStart, [0, 30], [0, 360], {
+        extrapolateRight: "clamp"
+      }) : 0;
+      translateX = 0;
       break;
     case "shake":
       translateX = isActive && frameSinceSpeechStart < 7 ? seededShake(speakerId, frameSinceSpeechStart) : 0;
@@ -87,7 +99,7 @@ export const SpeakerSticker = ({speakerId, speaker, activeLine, isActive, editCo
           position: "relative",
           width: 152,
           height: 152,
-          transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
+          transform: `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotation}deg)`,
         }}
       >
         <div
