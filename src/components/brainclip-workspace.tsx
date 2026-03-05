@@ -6,30 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { assetPackCatalog, duoPresets, subtitlePresetCatalog, voicePresetCatalog } from "@/lib/catalog";
 import { VoiceLibrary, type CustomVoice } from "./VoiceLibrary";
-
-type SettingsState = {
-  llmBaseUrl: string;
-  llmModel: string;
-  llmApiKey: string;
-  fishModelA: string;
-  fishModelB: string;
-  fishApiKey: string;
-  colabUrl: string;
-  hasLlmApiKey?: boolean;
-  hasFishApiKey?: boolean;
-};
-
-type ScriptLine = {
-  id: string;
-  speaker: "A" | "B";
-  text: string;
-  emotion: string;
-  speaking_rate: number;
-  pause_ms: number;
-  temperature: number;
-  chunk_length: number;
-  normalize: boolean;
-};
+import { StepIndicator, ConceptStep, VoiceStep, StyleStep, ScriptStep, RenderStep } from "./wizard";
 
 type JobRecord = {
   id: string;
@@ -45,18 +22,60 @@ type WorkspaceProps = {
   initialView: "dashboard" | "editor" | "voices" | "settings";
 };
 
+type WizardStep = 1 | 2 | 3 | 4 | 5;
+
 type SelectedCustomVoices = {
   speakerA?: { id: string; modelId: string; name: string };
   speakerB?: { id: string; modelId: string; name: string };
+};
+
+type SettingsState = {
+  llmBaseUrl: string;
+  llmModel: string;
+  llmApiKey: string;
+  ttsProvider: "fish" | "huggingface" | "elevenlabs";
+  fishModelA: string;
+  fishModelB: string;
+  fishApiKey: string;
+  hfModelA: string;
+  hfModelB: string;
+  hfToken: string;
+  elevenLabsVoiceA: string;
+  elevenLabsVoiceB: string;
+  elevenLabsApiKey: string;
+  colabUrl: string;
+  hasLlmApiKey?: boolean;
+  hasFishApiKey?: boolean;
+  hasHfToken?: boolean;
+  hasElevenLabsApiKey?: boolean;
+};
+
+type ScriptLine = {
+  id: string;
+  speaker: "A" | "B";
+  text: string;
+  emotion: string;
+  speaking_rate: number;
+  pause_ms: number;
+  temperature: number;
+  chunk_length: number;
+  normalize: boolean;
 };
 
 const defaultSettings: SettingsState = {
   llmBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
   llmModel: "gemini-1.5-flash",
   llmApiKey: "",
+  ttsProvider: "fish",
   fishModelA: voicePresetCatalog[0]?.fishModelId ?? "",
   fishModelB: voicePresetCatalog[1]?.fishModelId ?? "",
   fishApiKey: "",
+  hfModelA: "hexgrad/Kokoro-82M",
+  hfModelB: "hexgrad/Kokoro-82M",
+  hfToken: "",
+  elevenLabsVoiceA: "JBFqnCBsd6RMkjVDRZzb",
+  elevenLabsVoiceB: "JBFqnCBsd6RMkjVDRZzb",
+  elevenLabsApiKey: "",
   colabUrl: "",
 };
 
@@ -80,6 +99,7 @@ const buildDefaultEditorForm = () => ({
   assetPackId: assetPackCatalog[0]?.id ?? "",
   resolution: "720p" as "720p" | "480p",
   ctaText: "Made with Brainclip.",
+  draftId: undefined as string | undefined,
 });
 
 export const BrainclipWorkspace = ({ initialView }: WorkspaceProps) => {
@@ -93,21 +113,29 @@ export const BrainclipWorkspace = ({ initialView }: WorkspaceProps) => {
   const [activeJobId, setActiveJobId] = useState("");
   const [editorForm, setEditorForm] = useState(buildDefaultEditorForm);
   const [editorMessage, setEditorMessage] = useState("");
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+  const [isStartingRender, setIsStartingRender] = useState(false);
+  const [wizardStep, setWizardStep] = useState<WizardStep>(1);
+  const [completedSteps, setCompletedSteps] = useState<Set<WizardStep>>(new Set());
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [renderHealth, setRenderHealth] = useState<{ ok: boolean; note: string }>({ ok: false, note: "Render health not checked yet." });
   const [selectedCustomVoices, setSelectedCustomVoices] = useState<SelectedCustomVoices>({});
   const pollRef = useRef<number | null>(null);
 
   const activeJob = useMemo(() => jobs.find((job) => job.id === activeJobId) ?? jobs[0] ?? null, [activeJobId, jobs]);
   const readyForFish = Boolean((settings.hasFishApiKey || settings.fishApiKey) && settings.fishModelA && settings.fishModelB);
+  const readyForHf = Boolean((settings.hasHfToken || settings.hfToken) && settings.hfModelA && settings.hfModelB);
+  const readyForElevenLabs = Boolean((settings.hasElevenLabsApiKey || settings.elevenLabsApiKey) && settings.elevenLabsVoiceA && settings.elevenLabsVoiceB);
+  const readyForTTS = settings.ttsProvider === "huggingface" ? readyForHf : settings.ttsProvider === "elevenlabs" ? readyForElevenLabs : readyForFish;
   const readyForColab = Boolean(settings.colabUrl);
   const readyForLlm = Boolean(settings.llmModel && (settings.hasLlmApiKey || settings.llmApiKey));
-  const isReadyForRender = readyForLlm && (editorForm.voiceMode === "fish-api" ? readyForFish : readyForColab);
+  const isReadyForRender = readyForLlm && (editorForm.voiceMode === "fish-api" ? readyForTTS : readyForColab);
 
   const loadSettings = useCallback(async () => {
     const response = await fetch("/api/settings");
     const data = await response.json();
     if (response.ok) {
-      setSettings((current) => ({ ...current, ...data.settings, llmApiKey: data.settings.llmApiKey || "", fishApiKey: data.settings.fishApiKey || "" }));
+      setSettings((current) => ({ ...current, ...data.settings, llmApiKey: data.settings.llmApiKey || "", fishApiKey: data.settings.fishApiKey || "", hfToken: data.settings.hfToken || "", elevenLabsApiKey: data.settings.elevenLabsApiKey || "" }));
     }
   }, []);
 
@@ -210,7 +238,7 @@ export const BrainclipWorkspace = ({ initialView }: WorkspaceProps) => {
       return;
     }
 
-    setSettings((current) => ({ ...current, ...data.settings, llmApiKey: data.settings.llmApiKey || "", fishApiKey: data.settings.fishApiKey || "" }));
+    setSettings((current) => ({ ...current, ...data.settings, llmApiKey: data.settings.llmApiKey || "", fishApiKey: data.settings.fishApiKey || "", hfToken: data.settings.hfToken || "" }));
     setSettingsMessage("Studio settings saved. Brainclip can now generate and route jobs.");
   };
 
@@ -256,14 +284,14 @@ export const BrainclipWorkspace = ({ initialView }: WorkspaceProps) => {
             color: "#84d7ff",
             stickerUrl: editorForm.stickerUrlA,
             position: "top",
-            modelId: settings.fishModelA,
+            modelId: settings.ttsProvider === "huggingface" ? settings.hfModelA : settings.ttsProvider === "elevenlabs" ? settings.elevenLabsVoiceA : settings.fishModelA,
           },
           speakerB: {
             label: "Speaker B",
             color: "#ffb36b",
             stickerUrl: editorForm.stickerUrlB,
             position: "bottom",
-            modelId: settings.fishModelB,
+            modelId: settings.ttsProvider === "huggingface" ? settings.hfModelB : settings.ttsProvider === "elevenlabs" ? settings.elevenLabsVoiceB : settings.fishModelB,
           },
         },
         subtitleStyleId: editorForm.subtitleStyle,
@@ -308,6 +336,50 @@ export const BrainclipWorkspace = ({ initialView }: WorkspaceProps) => {
       await loadJobs();
       startPollingJob(job.id);
       setView("dashboard");
+    }
+  };
+
+  const saveDraft = async () => {
+    setIsSavingDraft(true);
+    try {
+      const response = await fetch("/api/drafts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          draftId: editorForm.draftId,
+          topic: editorForm.topic,
+          duoId: editorForm.duoId,
+          speakerAPersona: editorForm.speakerAPersona,
+          speakerBPersona: editorForm.speakerBPersona,
+          voiceMode: editorForm.voiceMode,
+          subtitleStyle: editorForm.subtitleStyle,
+          stickerAnim: editorForm.stickerAnim,
+          stickerUrlA: editorForm.stickerUrlA,
+          stickerUrlB: editorForm.stickerUrlB,
+          backgroundUrl: editorForm.backgroundUrl,
+          bgDimOpacity: editorForm.bgDimOpacity,
+          showProgressBar: editorForm.showProgressBar,
+          assetPackId: editorForm.assetPackId,
+          resolution: editorForm.resolution,
+          ctaText: editorForm.ctaText,
+          scriptLines: scriptLines,
+          fishModelA: settings.fishModelA,
+          fishModelB: settings.fishModelB,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.draft?.id) {
+        setEditorForm((current) => ({ ...current, draftId: data.draft.id }));
+        setEditorMessage("Draft saved successfully!");
+      } else {
+        setEditorMessage(data.error?.userMessage ?? "Failed to save draft.");
+      }
+    } catch (error) {
+      setEditorMessage("Failed to save draft. Please try again.");
+    } finally {
+      setIsSavingDraft(false);
     }
   };
 
@@ -368,6 +440,7 @@ export const BrainclipWorkspace = ({ initialView }: WorkspaceProps) => {
           ...current,
           fishModelA: voiceA.fishModelId || current.fishModelA,
           fishModelB: voiceB.fishModelId || current.fishModelB,
+          // Could expand to set HF/ElevenLabs preset defaults here if we had them mapped
         }));
         setEditorMessage(`Auto-assigned voices: ${voiceA.label} and ${voiceB.label} to match the ${preset.label} duo.`);
       }
@@ -389,11 +462,18 @@ export const BrainclipWorkspace = ({ initialView }: WorkspaceProps) => {
       },
     }));
 
-    // Update the fish model in settings
-    setSettings((current) => ({
-      ...current,
-      [speaker === "A" ? "fishModelA" : "fishModelB"]: voice.fishModelId!,
-    }));
+    // Update the relevant TTS model in settings based on the current TTS provider
+    setSettings((current) => {
+      const update = { ...current };
+      if (current.ttsProvider === "fish") {
+        update[speaker === "A" ? "fishModelA" : "fishModelB"] = voice.fishModelId!;
+      } else if (current.ttsProvider === "elevenlabs") {
+        update[speaker === "A" ? "elevenLabsVoiceA" : "elevenLabsVoiceB"] = voice.fishModelId!; // Fallback logic assuming ID might be shared
+      } else {
+        update[speaker === "A" ? "hfModelA" : "hfModelB"] = voice.fishModelId!;
+      }
+      return update;
+    });
 
     setEditorMessage(`Selected "${voice.name}" as Speaker ${speaker}`);
   };
@@ -462,169 +542,123 @@ export const BrainclipWorkspace = ({ initialView }: WorkspaceProps) => {
         {view === "editor" ? (
           <div className="workspace-stack">
             <div className="view-header">
-              <h1>Editor</h1>
-              <p>Configure your format, write the script, and start rendering.</p>
+              <h1>Create Video</h1>
+              <p>Follow the steps to create your video</p>
             </div>
-            
-            <section className="panel-block feature-panel">
-              <div className="panel-intro">
-                <strong>Format & Direction</strong>
-              </div>
-              <div className="selection-grid three">
-                {duoPresets.map((preset) => (
-                  <button key={preset.id} className={editorForm.duoId === preset.id ? "selection-card active" : "selection-card"} onClick={() => applyDuoPreset(preset.id)}>
-                    <strong>{preset.label}</strong>
-                    <span>{preset.hook}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="field-grid two">
-                <label className="field-block">
-                  <span>Topic</span>
-                  <textarea value={editorForm.topic} rows={2} onChange={(event) => setEditorForm((current) => ({ ...current, topic: event.target.value }))} />
-                </label>
-                <label className="field-block">
-                  <span>Background URL (Optional)</span>
-                  <input value={editorForm.backgroundUrl} onChange={(event) => setEditorForm((current) => ({ ...current, backgroundUrl: event.target.value }))} placeholder="https://..." />
-                </label>
-                <label className="field-block">
-                  <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                    <span>Speaker A persona</span>
-                    <label style={{fontSize: '0.8rem', color: 'var(--sky)', cursor: 'pointer'}}>
-                      Upload Sticker A
-                      <input type="file" accept="image/*" style={{display: 'none'}} onChange={(e) => { if(e.target.files?.[0]) handleUploadSticker("A", e.target.files[0]) }} />
-                    </label>
-                  </div>
-                  <textarea value={editorForm.speakerAPersona} rows={2} onChange={(event) => setEditorForm((current) => ({ ...current, speakerAPersona: event.target.value }))} />
-                  {editorForm.stickerUrlA && <div style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>✓ Custom sticker uploaded</div>}
-                </label>
-                <label className="field-block">
-                  <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                    <span>Speaker B persona</span>
-                    <label style={{fontSize: '0.8rem', color: 'var(--accent)', cursor: 'pointer'}}>
-                      Upload Sticker B
-                      <input type="file" accept="image/*" style={{display: 'none'}} onChange={(e) => { if(e.target.files?.[0]) handleUploadSticker("B", e.target.files[0]) }} />
-                    </label>
-                  </div>
-                  <textarea value={editorForm.speakerBPersona} rows={2} onChange={(event) => setEditorForm((current) => ({ ...current, speakerBPersona: event.target.value }))} />
-                  {editorForm.stickerUrlB && <div style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>✓ Custom sticker uploaded</div>}
-                </label>
-              </div>
-            </section>
 
-            <section className="panel-block split-panel">
-              <div>
-                <div className="panel-intro">
-                  <strong>Voice Assignments</strong>
-                </div>
-                <div className="selection-grid two">
-                  {voicePresetCatalog.map((voice) => (
-                    <button
-                      key={voice.id}
-                      className={settings.fishModelA === voice.fishModelId || settings.fishModelB === voice.fishModelId ? "selection-card active" : "selection-card"}
-                      onClick={() => setSettings((current) => ({ ...current, fishModelA: current.fishModelA || voice.fishModelId || voice.id, fishModelB: current.fishModelB || voice.fishModelId || voice.id }))}
-                    >
-                      <strong>{voice.label}</strong>
-                      <span>{voice.persona}</span>
-                    </button>
-                  ))}
-                </div>
-                <div style={{marginTop: '12px'}}>
-                  <button className="secondary-button" style={{fontSize: '0.85rem'}} onClick={() => setView("voices")}>Select custom voices →</button>
-                </div>
-              </div>
-              <div>
-                <div className="panel-intro">
-                  <strong>Visual Style</strong>
-                </div>
-                <div className="selection-grid two" style={{marginBottom: "16px"}}>
-                  {subtitlePresetCatalog.slice(0, 4).map((preset) => (
-                    <button key={preset.id} className={editorForm.subtitleStyle === preset.id ? "selection-card active" : "selection-card"} onClick={() => setEditorForm((current) => ({ ...current, subtitleStyle: preset.id }))}>
-                      <strong>{preset.label}</strong>
-                    </button>
-                  ))}
-                </div>
-                <div className="panel-intro">
-                  <strong>Sticker Animation</strong>
-                </div>
-                <div className="selection-grid three">
-                  {(["bounce", "spin", "pulse", "slide", "float", "shake"] as const).map((anim) => (
-                    <button 
-                      key={anim} 
-                      className={editorForm.stickerAnim === anim ? "selection-card active" : "selection-card"} 
-                      onClick={() => setEditorForm((current) => ({ ...current, stickerAnim: anim as any }))}
-                    >
-                      <strong style={{textTransform: 'capitalize'}}>{anim}</strong>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
+            <StepIndicator
+              currentStep={wizardStep}
+              onStepClick={(step) => {
+                if (step <= wizardStep || completedSteps.has(step as WizardStep)) {
+                  setWizardStep(step as WizardStep);
+                }
+              }}
+              completedSteps={completedSteps}
+            />
 
-            <section className="panel-block split-panel">
-              <div>
-                <div className="panel-intro">
-                  <strong>Video Composition</strong>
-                </div>
-                <label className="field-block" style={{marginBottom: "12px"}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                    <span>Background Dimming ({Math.round(editorForm.bgDimOpacity * 100)}%)</span>
-                  </div>
-                  <input type="range" min="0" max="1" step="0.05" value={editorForm.bgDimOpacity} onChange={(e) => setEditorForm(c => ({...c, bgDimOpacity: parseFloat(e.target.value)}))} />
-                </label>
-                <label className="field-block" style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
-                  <input type="checkbox" checked={editorForm.showProgressBar} onChange={(e) => setEditorForm(c => ({...c, showProgressBar: e.target.checked}))} />
-                  <span>Show Timeline Progress Bar</span>
-                </label>
-              </div>
-              <div>
-                <div className="panel-intro">
-                  <strong>Output Settings</strong>
-                </div>
-                <div className="selection-grid two">
-                  {(["720p", "480p"] as const).map((res) => (
-                    <button key={res} className={editorForm.resolution === res ? "selection-card active" : "selection-card"} onClick={() => setEditorForm((current) => ({ ...current, resolution: res }))}>
-                      <strong>{res}</strong>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
+            {wizardStep === 1 && (
+              <ConceptStep
+                form={editorForm}
+                onFormChange={setEditorForm as any}
+                onUploadSticker={handleUploadSticker}
+                message={editorMessage}
+              />
+            )}
 
-            <section className="panel-block">
-              <div className="panel-intro">
-                <strong>Script & Delivery</strong>
-              </div>
-              <div className="action-row">
-                <button className="primary-button" onClick={generateScript}>Generate script</button>
-                <button className="secondary-button" onClick={startRenderFlow} disabled={!scriptLines.length || !isReadyForRender}>Start render</button>
-              </div>
-              {editorMessage && <div className="status-chip">{editorMessage}</div>}
+            {wizardStep === 2 && (
+              <VoiceStep
+                form={editorForm}
+                settings={settings}
+                onFormChange={setEditorForm as any}
+                onSettingsChange={setSettings as any}
+                onGoToVoiceLibrary={() => setView("voices")}
+                message={editorMessage}
+              />
+            )}
+
+            {wizardStep === 3 && (
+              <StyleStep
+                form={editorForm}
+                onFormChange={setEditorForm as any}
+                message={editorMessage}
+              />
+            )}
+
+            {wizardStep === 4 && (
+              <ScriptStep
+                form={editorForm}
+                scriptLines={scriptLines as any}
+                onScriptLinesChange={setScriptLines as any}
+                onGenerateScript={async () => {
+                  setIsGeneratingScript(true);
+                  setEditorMessage("Generating script...");
+                  try {
+                    await generateScript();
+                    setCompletedSteps((prev) => new Set(prev).add(4));
+                    setEditorMessage("Script generated! You can now edit each line.");
+                  } finally {
+                    setIsGeneratingScript(false);
+                  }
+                }}
+                isGenerating={isGeneratingScript}
+                message={editorMessage}
+              />
+            )}
+
+            {wizardStep === 5 && (
+              <RenderStep
+                form={editorForm}
+                settings={settings as any}
+                scriptLines={scriptLines as any}
+                onFormChange={setEditorForm as any}
+                onStartRender={async () => {
+                  setIsStartingRender(true);
+                  setEditorMessage("Starting render pipeline...");
+                  try {
+                    await startRenderFlow();
+                  } finally {
+                    setIsStartingRender(false);
+                  }
+                }}
+                isStarting={isStartingRender}
+                message={editorMessage}
+              />
+            )}
+
+            <div className="wizard-nav">
+              {wizardStep > 1 && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setWizardStep((wizardStep - 1) as WizardStep)}
+                >
+                  ← Back
+                </button>
+              )}
               
-              <div className="script-grid" style={{ marginTop: '16px' }}>
-                {scriptLines.length === 0 ? (
-                  <div className="empty-panel" style={{ textAlign: 'center' }}>Hit &quot;Generate script&quot; to write your lines.</div>
-                ) : (
-                  scriptLines.map((line) => (
-                    <article key={line.id} className="script-card" style={{borderLeft: `5px solid ${line.speaker === 'A' ? 'var(--sky)' : 'var(--accent)'}`, transition: 'all 0.2s', boxShadow: 'var(--shadow-sm)'}}>
-                      <div className="script-meta" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
-                        <strong style={{color: line.speaker === 'A' ? 'var(--sky)' : 'var(--accent)'}}>{line.id}</strong>
-                        <span style={{background: 'var(--bg)', padding: '2px 8px', borderRadius: '12px', border: '1px solid var(--line)', fontSize: '0.8rem'}}>Speaker {line.speaker} · {line.emotion} · {line.speaking_rate.toFixed(2)}x</span>
-                      </div>
-                      <textarea
-                        value={line.text}
-                        rows={2}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setScriptLines((current) => current.map((entry) => (entry.id === line.id ? { ...entry, text: value } : entry)));
-                        }}
-                        style={{border: 'none', background: 'transparent', padding: '0', fontSize: '1.05rem', lineHeight: '1.5'}}
-                      />
-                    </article>
-                  ))
-                )}
-              </div>
-            </section>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={saveDraft}
+                disabled={isSavingDraft}
+              >
+                {isSavingDraft ? "Saving..." : "Save Draft"}
+              </button>
+
+              {wizardStep < 5 && (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    setCompletedSteps((prev) => new Set(prev).add(wizardStep));
+                    setWizardStep((wizardStep + 1) as WizardStep);
+                  }}
+                  disabled={wizardStep === 1 && (!editorForm.topic || !editorForm.duoId)}
+                >
+                  Next →
+                </button>
+              )}
+            </div>
           </div>
         ) : view === "dashboard" ? (
           <div className="workspace-stack">
@@ -743,9 +777,9 @@ export const BrainclipWorkspace = ({ initialView }: WorkspaceProps) => {
                   <strong style={{display: 'block'}}>LLM Engine</strong>
                   <span style={{display: 'block', marginTop: '4px'}}>{readyForLlm ? "Connected" : "Missing Key"}</span>
                 </div>
-                <div className={readyForFish ? "status-row good" : "status-row"} style={{background: 'var(--panel-strong)', padding: '16px', borderRadius: '12px', border: 'none'}}>
-                  <strong style={{display: 'block'}}>Fish API</strong>
-                  <span style={{display: 'block', marginTop: '4px'}}>{readyForFish ? "Connected" : "Missing Key"}</span>
+                <div className={readyForTTS ? "status-row good" : "status-row"} style={{background: 'var(--panel-strong)', padding: '16px', borderRadius: '12px', border: 'none'}}>
+                  <strong style={{display: 'block'}}>TTS API ({settings.ttsProvider})</strong>
+                  <span style={{display: 'block', marginTop: '4px'}}>{readyForTTS ? "Connected" : "Missing Key/Model"}</span>
                 </div>
                 <div className={readyForColab ? "status-row good" : "status-row"} style={{background: 'var(--panel-strong)', padding: '16px', borderRadius: '12px', border: 'none'}}>
                   <strong style={{display: 'block'}}>Colab Link</strong>
@@ -779,21 +813,73 @@ export const BrainclipWorkspace = ({ initialView }: WorkspaceProps) => {
                   <input type="text" value={settings.llmApiKey} onChange={(event) => setSettings((current) => ({ ...current, llmApiKey: event.target.value }))} placeholder="sk-..." />
                 </label>
                 
-                <label className="field-block">
-                  <span>Fish Model A</span>
-                  <input value={settings.fishModelA} onChange={(event) => setSettings((current) => ({ ...current, fishModelA: event.target.value }))} />
+                <label className="field-block" style={{ gridColumn: '1 / -1', marginBottom: '16px' }}>
+                  <span>TTS Provider</span>
+                  <select 
+                    value={settings.ttsProvider} 
+                    onChange={(event) => setSettings((current) => ({ ...current, ttsProvider: event.target.value as "fish" | "huggingface" | "elevenlabs" }))}
+                  >
+                    <option value="fish">Fish.audio</option>
+                    <option value="huggingface">Hugging Face (Kokoro etc.)</option>
+                    <option value="elevenlabs">Eleven Labs</option>
+                  </select>
                 </label>
-                <label className="field-block">
-                  <span>Fish Model B</span>
-                  <input value={settings.fishModelB} onChange={(event) => setSettings((current) => ({ ...current, fishModelB: event.target.value }))} />
-                </label>
-                <label className="field-block" style={{ gridColumn: '1 / -1' }}>
-                  <span style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <span>Fish API Key {settings.hasFishApiKey ? "(Securely Stored)" : ""}</span>
-                    <a href="https://fish.audio/" target="_blank" rel="noreferrer" style={{color: 'var(--accent)', textDecoration: 'none'}}>Get Key</a>
-                  </span>
-                  <input type="text" value={settings.fishApiKey} onChange={(event) => setSettings((current) => ({ ...current, fishApiKey: event.target.value }))} placeholder="fish_..." />
-                </label>
+
+                {settings.ttsProvider === "fish" ? (
+                  <>
+                    <label className="field-block">
+                      <span>Fish Model A</span>
+                      <input value={settings.fishModelA} onChange={(event) => setSettings((current) => ({ ...current, fishModelA: event.target.value }))} />
+                    </label>
+                    <label className="field-block">
+                      <span>Fish Model B</span>
+                      <input value={settings.fishModelB} onChange={(event) => setSettings((current) => ({ ...current, fishModelB: event.target.value }))} />
+                    </label>
+                    <label className="field-block" style={{ gridColumn: '1 / -1' }}>
+                      <span style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        <span>Fish API Key {settings.hasFishApiKey ? "(Securely Stored)" : ""}</span>
+                        <a href="https://fish.audio/" target="_blank" rel="noreferrer" style={{color: 'var(--accent)', textDecoration: 'none'}}>Get Key</a>
+                      </span>
+                      <input type="text" value={settings.fishApiKey} onChange={(event) => setSettings((current) => ({ ...current, fishApiKey: event.target.value }))} placeholder="fish_..." />
+                    </label>
+                  </>
+                ) : settings.ttsProvider === "elevenlabs" ? (
+                  <>
+                    <label className="field-block">
+                      <span>Eleven Labs Voice A ID</span>
+                      <input value={settings.elevenLabsVoiceA} onChange={(event) => setSettings((current) => ({ ...current, elevenLabsVoiceA: event.target.value }))} placeholder="Voice ID (e.g. JBFqnCBsd6RMkjVDRZzb)" />
+                    </label>
+                    <label className="field-block">
+                      <span>Eleven Labs Voice B ID</span>
+                      <input value={settings.elevenLabsVoiceB} onChange={(event) => setSettings((current) => ({ ...current, elevenLabsVoiceB: event.target.value }))} placeholder="Voice ID (e.g. JBFqnCBsd6RMkjVDRZzb)" />
+                    </label>
+                    <label className="field-block" style={{ gridColumn: '1 / -1' }}>
+                      <span style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        <span>Eleven Labs API Key {settings.hasElevenLabsApiKey ? "(Securely Stored)" : ""}</span>
+                        <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noreferrer" style={{color: 'var(--accent)', textDecoration: 'none'}}>Get Key</a>
+                      </span>
+                      <input type="text" value={settings.elevenLabsApiKey} onChange={(event) => setSettings((current) => ({ ...current, elevenLabsApiKey: event.target.value }))} placeholder="sk_..." />
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label className="field-block">
+                      <span>HF Model A</span>
+                      <input value={settings.hfModelA} onChange={(event) => setSettings((current) => ({ ...current, hfModelA: event.target.value }))} placeholder="hexgrad/Kokoro-82M" />
+                    </label>
+                    <label className="field-block">
+                      <span>HF Model B</span>
+                      <input value={settings.hfModelB} onChange={(event) => setSettings((current) => ({ ...current, hfModelB: event.target.value }))} placeholder="hexgrad/Kokoro-82M" />
+                    </label>
+                    <label className="field-block" style={{ gridColumn: '1 / -1' }}>
+                      <span style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        <span>Hugging Face Token {settings.hasHfToken ? "(Securely Stored)" : ""}</span>
+                        <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" style={{color: 'var(--accent)', textDecoration: 'none'}}>Get Key</a>
+                      </span>
+                      <input type="text" value={settings.hfToken} onChange={(event) => setSettings((current) => ({ ...current, hfToken: event.target.value }))} placeholder="hf_..." />
+                    </label>
+                  </>
+                )}
 
                 <label className="field-block" style={{ gridColumn: '1 / -1' }}>
                   <span>Colab Tunnel URL (Optional)</span>

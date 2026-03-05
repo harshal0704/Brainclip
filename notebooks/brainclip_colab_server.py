@@ -1,26 +1,67 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import io
 import json
 import math
 import os
+import pickle
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import requests
 import soundfile as sf
-from fastapi import FastAPI, HTTPException
+import torch
+import transformers
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from faster_whisper import WhisperModel
 from pydantic import BaseModel, Field
 
-
-APP_ROOT = Path(os.environ.get("BRAINCLIP_APP_ROOT", "/content/brainclip_runtime"))
+APP_ROOT = Path(os.environ.get("BRAINCLIP_APP_ROOT", "/content"))
 MODEL_CACHE = APP_ROOT / "models"
+REF_CACHE_DIR = APP_ROOT / "cache" / "refs"
+TEMP_DIR = APP_ROOT / "tmp"
 
-app = FastAPI(title="Brainclip Colab Voice Runtime")
+REF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
+
+app = FastAPI(title="Brainclip Colab Voice Runtime — Fish S2-Pro")
+
 whisper_model: WhisperModel | None = None
+s2_engine: Any = None
+_executor = ThreadPoolExecutor(max_workers=4)
+job_store: dict[str, dict[str, Any]] = {}
 
+MODEL_NAME = "fishaudio/s2-pro"
+MODEL_LOCAL_DIR = MODEL_CACHE / "s2-pro"
+
+S2_PRO_INSTALLED = False
+try:
+    from fish_speech.models.text2semantic.inference import (
+        GenerateRequest,
+        GenerateResponse,
+    )
+    from fish_speech.text_to_speech import TextToSpeech
+
+    S2_PRO_INSTALLED = True
+except ImportError:
+    pass
+
+VLLM_OMNI_INSTALLED = False
+try:
+    from vllm_omni import OmniEngine
+
+    VLLM_OMNI_INSTALLED = True
+except ImportError:
+    pass
+
+
+# ──────────────────────────────────────────────────────────────
+# Models
+# ──────────────────────────────────────────────────────────────
 
 class VoiceLine(BaseModel):
     id: str
@@ -37,6 +78,7 @@ class VoiceLine(BaseModel):
 class SpeakerConfig(BaseModel):
     label: str
     modelId: str | None = None
+    refText: str | None = None
 
 
 class PresignedUrls(BaseModel):
@@ -56,86 +98,427 @@ class VoiceJobRequest(BaseModel):
     presignedUrls: PresignedUrls
 
 
+class EncodeRefRequest(BaseModel):
+    refAudioUrl: str
+    refText: str
+    speaker: str = "A"
+
+
+# ──────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────
+
 def get_whisper() -> WhisperModel:
     global whisper_model
     if whisper_model is None:
-        whisper_model = WhisperModel("large-v2", device="cuda", compute_type="float16", download_root=str(MODEL_CACHE / "whisper"))
+        whisper_model = WhisperModel(
+            "large-v2",
+            device="cuda",
+            compute_type="float16",
+            download_root=str(MODEL_CACHE / "whisper"),
+        )
     return whisper_model
 
 
-def synthesize_placeholder(line: VoiceLine, sample_rate: int = 44100) -> np.ndarray:
-    word_count = max(1, len(line.text.split()))
-    duration = max(0.9, (word_count / (2.4 * max(line.speaking_rate, 0.75))))
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    base_freq = 220 if line.speaker == "A" else 180
-    wave = 0.18 * np.sin(2 * math.pi * base_freq * t)
-    envelope = np.minimum(1, t * 3) * np.minimum(1, (duration - t) * 3)
-    return (wave * envelope).astype(np.float32)
-
-
 def to_wav_bytes(audio: np.ndarray, sample_rate: int = 44100) -> bytes:
+    if audio.dtype != np.float32:
+        audio = audio.astype(np.float32)
+    audio = np.clip(audio, -1.0, 1.0)
     buffer = io.BytesIO()
     sf.write(buffer, audio, sample_rate, format="WAV", subtype="PCM_16")
     return buffer.getvalue()
 
 
 def upload_presigned(url: str, body: bytes, content_type: str) -> None:
-    response = requests.put(url, data=body, headers={"content-type": content_type}, timeout=120)
+    response = requests.put(url, data=body, headers={"content-type": content_type}, timeout=300)
     response.raise_for_status()
 
 
-def build_master(lines: list[VoiceLine], rendered: list[np.ndarray], sample_rate: int = 44100) -> np.ndarray:
+def build_master(lines: list[VoiceLine], rendered: dict[str, np.ndarray], sample_rate: int = 44100) -> np.ndarray:
     segments: list[np.ndarray] = []
-    for line, audio in zip(lines, rendered):
-      segments.append(audio)
-      silence = np.zeros(int(sample_rate * (line.pause_ms / 1000)), dtype=np.float32)
-      segments.append(silence)
+    sorted_lines = sorted(lines, key=lambda l: l.id)
+    for line in sorted_lines:
+        audio = rendered[line.id]
+        segments.append(audio)
+        silence = np.zeros(int(sample_rate * (line.pause_ms / 1000)), dtype=np.float32)
+        segments.append(silence)
     return np.concatenate(segments) if segments else np.zeros(sample_rate, dtype=np.float32)
 
 
-def transcribe(master_path: str) -> list[dict[str, Any]]:
-    segments, _ = get_whisper().transcribe(master_path, word_timestamps=True)
+def transcribe(audio_path: str | bytes) -> list[dict[str, Any]]:
+    if isinstance(audio_path, bytes):
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(audio_path)
+            audio_path = tmp.name
+    segments, _ = get_whisper().transcribe(audio_path, word_timestamps=True)
     words: list[dict[str, Any]] = []
     speaker = "A"
     for segment in segments:
-      for word in segment.words or []:
-        words.append({
-          "word": word.word.strip(),
-          "start": word.start,
-          "end": word.end,
-          "speaker": speaker,
-        })
+        for word in segment.words or []:
+            words.append({
+                "word": word.word.strip(),
+                "start": round(word.start, 3),
+                "end": round(word.end, 3),
+                "speaker": speaker,
+            })
     return words
 
 
-@app.get("/health")
-def health() -> dict[str, Any]:
+def get_ref_cache_key(ref_id: str, ref_text: str) -> str:
+    return hashlib.sha256(f"{ref_id}:{ref_text}".encode()).hexdigest()[:20]
+
+
+# ──────────────────────────────────────────────────────────────
+# S2-Pro engine management
+# ──────────────────────────────────────────────────────────────
+
+def _check_gpu() -> dict[str, Any]:
+    if not torch.cuda.is_available():
+        return {"ok": False, "reason": "CUDA not available"}
+    mem_free, mem_total = torch.cuda.mem_get_info()
     return {
-        "status": "ok",
-        "models_loaded": whisper_model is not None,
-        "session_id": os.environ.get("COLAB_RELEASE_TAG", "local-session"),
+        "ok": True,
+        "mem_free_gb": round(mem_free / 1e9, 1),
+        "mem_total_gb": round(mem_total / 1e9, 1),
+        "util_pct": round((1 - mem_free / mem_total) * 100, 1),
     }
 
 
-@app.post("/voice/job")
-def voice_job(payload: VoiceJobRequest) -> dict[str, Any]:
+def _load_s2_engine() -> Any:
+    global s2_engine
+    if s2_engine is not None:
+        return s2_engine
+
+    gpu = _check_gpu()
+    if not gpu["ok"]:
+        raise RuntimeError(f"Cannot load S2-Pro: {gpu['reason']}")
+
+    mem_free_gb = gpu["mem_free_gb"]
+
+    if VLLM_OMNI_INSTALLED:
+        s2_engine = OmniEngine(
+            model_path=str(MODEL_LOCAL_DIR),
+            dtype="bfloat16",
+            gpu_memory_utilization=0.80 if mem_free_gb > 10 else 0.65,
+            max_model_len=4096,
+            enforce_eager=True,
+        )
+    elif S2_PRO_INSTALLED:
+        s2_engine = TextToSpeech(
+            model_path=str(MODEL_LOCAL_DIR),
+            device="cuda",
+            compile=False,
+            dtype=torch.bfloat16,
+        )
+    else:
+        raise ImportError(
+            "Neither vllm-omni nor fish-speech is installed. "
+            "Run: pip install vllm==0.8.4  OR  pip install fish-speech"
+        )
+
+    return s2_engine
+
+
+# ──────────────────────────────────────────────────────────────
+# Reference encoding
+# ──────────────────────────────────────────────────────────────
+
+def _encode_ref_from_bytes(audio_bytes: bytes, ref_text: str) -> bytes:
+    cache_key = get_ref_cache_key("upload", ref_text)
+    cache_path = REF_CACHE_DIR / f"{cache_key}.npy"
+
+    if cache_path.exists():
+        return cache_path.read_bytes()
+
+    temp_ref = TEMP_DIR / f"ref_{cache_key}.wav"
+    temp_ref.write_bytes(audio_bytes)
+
     try:
-        rendered = [synthesize_placeholder(line) for line in payload.lines]
-        temp_dir = APP_ROOT / "tmp" / payload.jobId
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        if VLLM_OMNI_INSTALLED:
+            engine = _load_s2_engine()
+            ref_tokens = engine.encode_reference(str(temp_ref), ref_text)
+        elif S2_PRO_INSTALLED:
+            from fish_speech.text_to_speech import encode_reference
+            ref_tokens = encode_reference(str(temp_ref), ref_text)
+        else:
+            raise RuntimeError("No S2-Pro engine available")
 
-        for line, audio in zip(payload.lines, rendered):
-            upload_presigned(payload.presignedUrls.lines[line.id], to_wav_bytes(audio), "audio/wav")
+        tokens_np = ref_tokens.cpu().numpy() if hasattr(ref_tokens, "cpu") else ref_tokens
+        result_bytes = tokens_np.tobytes()
+        cache_path.write_bytes(result_bytes)
+    finally:
+        temp_ref.unlink(missing_ok=True)
 
-        master = build_master(payload.lines, rendered)
+    return result_bytes
+
+
+def _download_audio(url: str) -> bytes:
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    return resp.content
+
+
+# ──────────────────────────────────────────────────────────────
+# S2-Pro synthesis
+# ──────────────────────────────────────────────────────────────
+
+EMOTION_TAG_MAP: dict[str, str] = {
+    "neutral": "",
+    "happy": "[happy]",
+    "sad": "[sad]",
+    "angry": "[angry]",
+    "surprised": "[surprised]",
+    "excited": "[excited]",
+    "whispering": "[whisper]",
+    "shouting": "[shouting]",
+}
+
+
+def _synthesize_s2pro(
+    text: str,
+    ref_tokens_bytes: bytes,
+    emotion: str,
+    speaking_rate: float,
+) -> np.ndarray:
+    engine = _load_s2_engine()
+
+    emotion_tag = EMOTION_TAG_MAP.get(emotion.lower(), f"[{emotion}]")
+    if emotion_tag and emotion_tag not in ("[neutral]", ""):
+        full_text = f"{emotion_tag} {text}"
+    else:
+        full_text = text
+
+    if VLLM_OMNI_INSTALLED:
+        ref_tokens_np = np.frombuffer(ref_tokens_bytes, dtype=np.int64)
+        ref_tokens = torch.from_numpy(ref_tokens_np).cuda()
+
+        audio_tensor, sr = engine.generate(
+            text=full_text,
+            reference_tokens=ref_tokens,
+            max_tokens=2048,
+            temperature=0.7,
+            top_p=0.9,
+        )
+
+        audio = audio_tensor.float().cpu().numpy()
+        if audio.ndim == 2:
+            audio = audio.mean(axis=0)
+        return audio.astype(np.float32)
+
+    elif S2_PRO_INSTALLED:
+        from fish_speech.text_to_speech import synthesize
+
+        ref_tokens_np = np.frombuffer(ref_tokens_bytes, dtype=np.int64)
+        ref_tokens = torch.from_numpy(ref_tokens_np).cuda()
+
+        audio = synthesize(
+            text=full_text,
+            reference_tokens=ref_tokens,
+            speed=speaking_rate,
+            enable_cache=True,
+        )
+
+        audio_np = audio.float().cpu().numpy()
+        if audio_np.ndim == 2:
+            audio_np = audio_np.mean(axis=0)
+        return audio_np.astype(np.float32)
+
+    else:
+        raise RuntimeError("No S2-Pro engine available")
+
+
+# ──────────────────────────────────────────────────────────────
+# Async job runner
+# ──────────────────────────────────────────────────────────────
+
+async def _run_tts_job(job_id: str, payload: VoiceJobRequest) -> None:
+    try:
+        job_store[job_id] = {"stage": "initializing", "progressPct": 0, "error": None}
+
+        gpu = _check_gpu()
+        if not gpu["ok"]:
+            job_store[job_id] = {"stage": "failed", "progressPct": 0, "error": gpu["reason"]}
+            return
+
+        if gpu["mem_free_gb"] < 2.0:
+            job_store[job_id] = {"stage": "gpu_low_memory", "progressPct": 0, "error": "GPU memory critically low. Restart runtime."}
+            return
+
+        job_store[job_id] = {"stage": "encoding_reference", "progressPct": 5, "gpuMemFreeGb": gpu["mem_free_gb"]}
+
+        ref_a_url = payload.speakerA.modelId or ""
+        ref_b_url = payload.speakerB.modelId or ""
+        ref_a_text = payload.speakerA.refText or payload.speakerA.label
+        ref_b_text = payload.speakerB.refText or payload.speakerB.label
+
+        try:
+            ref_a_bytes = _encode_ref_from_bytes(_download_audio(ref_a_url), ref_a_text) if ref_a_url else b""
+            ref_b_bytes = _encode_ref_from_bytes(_download_audio(ref_b_url), ref_b_text) if ref_b_url else b""
+        except Exception as exc:
+            job_store[job_id] = {"stage": "failed", "progressPct": 5, "error": f"Reference download/encode failed: {exc}"}
+            return
+
+        job_store[job_id] = {"stage": "synthesizing", "progressPct": 20, "gpuMemFreeGb": gpu["mem_free_gb"]}
+
+        loop = asyncio.get_event_loop()
+        rendered: dict[str, np.ndarray] = {}
+        total = len(payload.lines)
+
+        for i, line in enumerate(payload.lines):
+            ref_tokens = ref_a_bytes if line.speaker == "A" else ref_b_bytes
+
+            try:
+                audio = await loop.run_in_executor(
+                    _executor,
+                    _synthesize_s2pro,
+                    line.text,
+                    ref_tokens,
+                    line.emotion,
+                    line.speaking_rate,
+                )
+            except torch.cuda.OutOfMemoryError:
+                job_store[job_id] = {
+                    "stage": "model_oom",
+                    "progressPct": 20 + int((i / total) * 50),
+                    "error": "GPU OOM during synthesis. Try restarting the Colab runtime or reducing batch size.",
+                }
+                return
+            except Exception as exc:
+                job_store[job_id] = {
+                    "stage": "synthesis_error",
+                    "progressPct": 20 + int((i / total) * 50),
+                    "error": f"Line {line.id} failed: {exc}",
+                }
+                return
+
+            rendered[line.id] = audio
+
+            current_pct = 20 + int(((i + 1) / total) * 50)
+            gpu = _check_gpu()
+            job_store[job_id] = {
+                "stage": f"synthesizing ({i + 1}/{total})",
+                "progressPct": current_pct,
+                "gpuMemFreeGb": gpu.get("mem_free_gb"),
+            }
+
+        job_store[job_id] = {"stage": "uploading", "progressPct": 70}
+
+        sorted_lines = sorted(payload.lines, key=lambda l: l.id)
+        for line in sorted_lines:
+            try:
+                upload_presigned(
+                    payload.presignedUrls.lines[line.id],
+                    to_wav_bytes(rendered[line.id]),
+                    "audio/wav",
+                )
+            except Exception as exc:
+                job_store[job_id] = {"stage": "upload_failed", "progressPct": 70, "error": f"Upload failed for {line.id}: {exc}"}
+                return
+
+        job_store[job_id] = {"stage": "building_master", "progressPct": 80}
+
+        master = build_master(sorted_lines, rendered)
         master_bytes = to_wav_bytes(master)
-        master_path = temp_dir / "master.wav"
-        master_path.write_bytes(master_bytes)
-        upload_presigned(payload.presignedUrls.master, master_bytes, "audio/wav")
 
-        words = transcribe(str(master_path))
-        upload_presigned(payload.presignedUrls.transcript, json.dumps(words).encode("utf-8"), "application/json")
+        job_store[job_id] = {"stage": "transcribing", "progressPct": 85}
 
-        return {"jobId": payload.jobId, "stage": "voice_done", "progressPct": 100}
+        try:
+            words = transcribe(master_bytes)
+        except Exception as exc:
+            words = [{"word": w, "start": 0.0, "end": 0.0, "speaker": "A"} for w in "placeholder".split()]
+
+        try:
+            upload_presigned(payload.presignedUrls.transcript, json.dumps(words).encode("utf-8"), "application/json")
+            upload_presigned(payload.presignedUrls.master, master_bytes, "audio/wav")
+        except Exception as exc:
+            job_store[job_id] = {"stage": "upload_failed", "progressPct": 85, "error": f"Master/transcript upload failed: {exc}"}
+            return
+
+        job_store[job_id] = {"stage": "voice_done", "progressPct": 100}
+
+    except Exception as exc:  # noqa: BLE001
+        import traceback
+        job_store[job_id] = {"stage": "failed", "progressPct": 0, "error": f"{exc}\n{traceback.format_exc()}"}
+
+
+# ──────────────────────────────────────────────────────────────
+# Routes
+# ──────────────────────────────────────────────────────────────
+
+@app.get("/health")
+def health() -> dict[str, Any]:
+    gpu_info = _check_gpu()
+    model_loaded = s2_engine is not None
+
+    return {
+        "status": "ok" if gpu_info["ok"] else "degraded",
+        "model": MODEL_NAME,
+        "models_loaded": model_loaded,
+        "engine_type": "vllm-omni" if VLLM_OMNI_INSTALLED else ("fish-speech" if S2_PRO_INSTALLED else "none"),
+        "gpu_mem_free_gb": gpu_info.get("mem_free_gb"),
+        "gpu_mem_total_gb": gpu_info.get("mem_total_gb"),
+        "gpu_util_pct": gpu_info.get("util_pct"),
+        "gpu_ok": gpu_info["ok"],
+        "session_id": os.environ.get("COLAB_RELEASE_TAG", "local-session"),
+        "gpu_vram_gb": round(torch.cuda.get_device_properties(0).total_memory / 1e9, 1) if torch.cuda.is_available() else 0,
+    }
+
+
+@app.post("/voice/encode-ref")
+async def encode_ref(payload: EncodeRefRequest) -> dict[str, Any]:
+    try:
+        audio_bytes = _download_audio(payload.refAudioUrl)
+        tokens = _encode_ref_from_bytes(audio_bytes, payload.refText)
+        cache_key = get_ref_cache_key(payload.refAudioUrl, payload.refText)
+        return {"cacheKey": cache_key, "speaker": payload.speaker, "tokens_size_bytes": len(tokens)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/voice/clone")
+async def clone_voice(
+    speaker: str = Form(...),
+    refText: str = Form(...),
+    file: UploadFile = File(...),
+) -> dict[str, Any]:
+    try:
+        audio_bytes = await file.read()
+        tokens = _encode_ref_from_bytes(audio_bytes, refText)
+        cache_key = get_ref_cache_key(f"upload_{file.filename}", refText)
+        return {"cacheKey": cache_key, "speaker": speaker, "tokens_size_bytes": len(tokens)}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/voice/job")
+async def voice_job(payload: VoiceJobRequest) -> dict[str, Any]:
+    job_store[payload.jobId] = {"stage": "queued", "progressPct": 0, "error": None}
+    asyncio.create_task(_run_tts_job(payload.jobId, payload))
+    return {"jobId": payload.jobId, "stage": "queued", "progressPct": 0}
+
+
+@app.get("/voice/job/{job_id}")
+def get_job_status(job_id: str) -> dict[str, Any]:
+    if job_id not in job_store:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    return job_store[job_id]
+
+
+@app.delete("/voice/cache/{cache_key}")
+def clear_cache(cache_key: str) -> dict[str, Any]:
+    removed = 0
+    for f in REF_CACHE_DIR.glob(f"{cache_key}*"):
+        f.unlink(missing_ok=True)
+        removed += 1
+    return {"removed": removed, "cache_key": cache_key}
+
+
+@app.delete("/voice/cache")
+def clear_all_cache() -> dict[str, Any]:
+    removed = 0
+    for f in REF_CACHE_DIR.iterdir():
+        if f.is_file():
+            f.unlink()
+            removed += 1
+    return {"removed": removed}

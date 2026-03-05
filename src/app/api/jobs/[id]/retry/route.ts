@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { AppError, toErrorResponse } from "@/lib/errors";
 import { buildJobPresignedOutputs } from "@/lib/jobs";
 import { requireUserFromRequest } from "@/lib/session";
-import { dispatchColabVoiceJob, dispatchFishApiVoiceJob } from "@/lib/voice";
+import { dispatchColabVoiceJob, dispatchElevenLabsVoiceJob, dispatchFishApiVoiceJob, dispatchHuggingFaceVoiceJob } from "@/lib/voice";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -164,63 +164,181 @@ export async function POST(request: NextRequest, context: RouteContext) {
             })
             .where(eq(jobs.id, id));
         } else {
-          const fishApiKey = decryptSecret(user.fishApiKey);
+          if (user.ttsProvider === "huggingface") {
+            const hfToken = decryptSecret(user.hfToken);
 
-          if (!fishApiKey) {
-            throw new AppError(
-              "fish_key_missing",
-              "No Fish API key",
-              "Add your Fish.audio API key in settings.",
-              400,
-            );
-          }
+            if (!hfToken) {
+              throw new AppError(
+                "hf_key_missing",
+                "No Hugging Face Token",
+                "Add your Hugging Face Token in settings.",
+                400,
+              );
+            }
 
-          await db
-            .update(jobs)
-            .set({
-              status: "voice_processing",
-              stage: "Retrying voice generation with Fish.audio",
-              progressPct: 12,
-              updatedAt: new Date(),
-            })
-            .where(eq(jobs.id, id));
+            await db
+              .update(jobs)
+              .set({
+                status: "voice_processing",
+                stage: "Retrying voice generation with Hugging Face",
+                progressPct: 12,
+                updatedAt: new Date(),
+              })
+              .where(eq(jobs.id, id));
 
-          await dispatchFishApiVoiceJob(
-            {
-              jobId: id,
-              userId: user.id,
-              bucket: user.s3Bucket,
-              region: user.s3Region,
-              lines: scriptLines.map((line) => ({
-                ...line,
-                emotion: line.emotion ?? "neutral",
-                speaking_rate: line.speaking_rate ?? 1,
-                pause_ms: line.pause_ms ?? 250,
-                temperature: line.temperature ?? 0.7,
-                chunk_length: line.chunk_length ?? 200,
-                normalize: line.normalize ?? true,
-              })),
-              speakerA: voiceMap.speakerA as Parameters<typeof dispatchFishApiVoiceJob>[0]["speakerA"],
-              speakerB: voiceMap.speakerB as Parameters<typeof dispatchFishApiVoiceJob>[0]["speakerB"],
-              presignedUrls: {
-                lines: presigned.urls.audioFiles,
-                master: presigned.urls.masterAudio,
-                transcript: presigned.urls.transcriptJson,
+            await dispatchHuggingFaceVoiceJob(
+              {
+                jobId: id,
+                userId: user.id,
+                bucket: user.s3Bucket,
+                region: user.s3Region,
+                lines: scriptLines.map((line) => ({
+                  ...line,
+                  emotion: line.emotion ?? "neutral",
+                  speaking_rate: line.speaking_rate ?? 1,
+                  pause_ms: line.pause_ms ?? 250,
+                  temperature: line.temperature ?? 0.7,
+                  chunk_length: line.chunk_length ?? 200,
+                  normalize: line.normalize ?? true,
+                })),
+                speakerA: voiceMap.speakerA as Parameters<typeof dispatchHuggingFaceVoiceJob>[0]["speakerA"],
+                speakerB: voiceMap.speakerB as Parameters<typeof dispatchHuggingFaceVoiceJob>[0]["speakerB"],
+                presignedUrls: {
+                  lines: presigned.urls.audioFiles,
+                  master: presigned.urls.masterAudio,
+                  transcript: presigned.urls.transcriptJson,
+                },
               },
-            },
-            fishApiKey,
-          );
+              hfToken,
+            );
 
-          await db
-            .update(jobs)
-            .set({
-              status: "voice_done",
-              stage: "Voice assets regenerated successfully",
-              progressPct: 60,
-              errorMessage: null,
-              updatedAt: new Date(),
-            })
-            .where(eq(jobs.id, id));
+            await db
+              .update(jobs)
+              .set({
+                status: "voice_done",
+                stage: "Voice assets regenerated successfully",
+                progressPct: 60,
+                errorMessage: null,
+                updatedAt: new Date(),
+              })
+              .where(eq(jobs.id, id));
+          } else if (user.ttsProvider === "elevenlabs") {
+            const elevenLabsApiKey = decryptSecret(user.elevenLabsApiKey);
+
+            if (!elevenLabsApiKey) {
+              throw new AppError(
+                "elevenlabs_key_missing",
+                "No Eleven Labs API Key",
+                "Add your Eleven Labs API Key in settings.",
+                400,
+              );
+            }
+
+            await db
+              .update(jobs)
+              .set({
+                status: "voice_processing",
+                stage: "Retrying voice generation with Eleven Labs",
+                progressPct: 12,
+                updatedAt: new Date(),
+              })
+              .where(eq(jobs.id, id));
+
+            await dispatchElevenLabsVoiceJob(
+              {
+                jobId: id,
+                userId: user.id,
+                bucket: user.s3Bucket,
+                region: user.s3Region,
+                lines: scriptLines.map((line) => ({
+                  ...line,
+                  emotion: line.emotion ?? "neutral",
+                  speaking_rate: line.speaking_rate ?? 1,
+                  pause_ms: line.pause_ms ?? 250,
+                  temperature: line.temperature ?? 0.7,
+                  chunk_length: line.chunk_length ?? 200,
+                  normalize: line.normalize ?? true,
+                })),
+                speakerA: voiceMap.speakerA as Parameters<typeof dispatchElevenLabsVoiceJob>[0]["speakerA"],
+                speakerB: voiceMap.speakerB as Parameters<typeof dispatchElevenLabsVoiceJob>[0]["speakerB"],
+                presignedUrls: {
+                  lines: presigned.urls.audioFiles,
+                  master: presigned.urls.masterAudio,
+                  transcript: presigned.urls.transcriptJson,
+                },
+              },
+              elevenLabsApiKey,
+            );
+
+            await db
+              .update(jobs)
+              .set({
+                status: "voice_done",
+                stage: "Voice assets regenerated successfully",
+                progressPct: 60,
+                errorMessage: null,
+                updatedAt: new Date(),
+              })
+              .where(eq(jobs.id, id));
+          } else {
+            const fishApiKey = decryptSecret(user.fishApiKey);
+
+            if (!fishApiKey) {
+              throw new AppError(
+                "fish_key_missing",
+                "No Fish API key",
+                "Add your Fish.audio API key in settings.",
+                400,
+              );
+            }
+
+            await db
+              .update(jobs)
+              .set({
+                status: "voice_processing",
+                stage: "Retrying voice generation with Fish.audio",
+                progressPct: 12,
+                updatedAt: new Date(),
+              })
+              .where(eq(jobs.id, id));
+
+            await dispatchFishApiVoiceJob(
+              {
+                jobId: id,
+                userId: user.id,
+                bucket: user.s3Bucket,
+                region: user.s3Region,
+                lines: scriptLines.map((line) => ({
+                  ...line,
+                  emotion: line.emotion ?? "neutral",
+                  speaking_rate: line.speaking_rate ?? 1,
+                  pause_ms: line.pause_ms ?? 250,
+                  temperature: line.temperature ?? 0.7,
+                  chunk_length: line.chunk_length ?? 200,
+                  normalize: line.normalize ?? true,
+                })),
+                speakerA: voiceMap.speakerA as Parameters<typeof dispatchFishApiVoiceJob>[0]["speakerA"],
+                speakerB: voiceMap.speakerB as Parameters<typeof dispatchFishApiVoiceJob>[0]["speakerB"],
+                presignedUrls: {
+                  lines: presigned.urls.audioFiles,
+                  master: presigned.urls.masterAudio,
+                  transcript: presigned.urls.transcriptJson,
+                },
+              },
+              fishApiKey,
+            );
+
+            await db
+              .update(jobs)
+              .set({
+                status: "voice_done",
+                stage: "Voice assets regenerated successfully",
+                progressPct: 60,
+                errorMessage: null,
+                updatedAt: new Date(),
+              })
+              .where(eq(jobs.id, id));
+          }
         }
       } catch (voiceError) {
         const errorMessage =

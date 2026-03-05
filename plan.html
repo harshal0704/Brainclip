@@ -89,7 +89,7 @@ body,div,span,p{font-family:var(--font-sans)}
 <div class="succ">Final architecture: Vercel (UI + orchestration) · Google Colab (voice only, BYOK GPU) · AWS Lambda (Remotion render, ~$0.03/video) · AWS S3 (per-user isolated storage). Each layer is independently replaceable.</div>
 <div class="four">
   <div class="card"><div class="card-h"><span class="badge bb">Layer 1</span> Vercel</div><div class="card-b">Next.js App Router. Auth, dashboard, job creation, Remotion Player preview, script editor, polling, delivery. Zero compute cost — serverless.</div></div>
-  <div class="card"><div class="card-h"><span class="badge bg">Layer 2</span> Colab</div><div class="card-b">Fish Speech S2-Pro TTS only. FastAPI server exposed via Cloudflare Tunnel. Generates WAVs + word timestamps, uploads to user S3. Optional — fish.audio API replaces it.</div></div>
+  <div class="card"><div class="card-h"><span class="badge bg">Layer 2</span> Colab</div><div class="card-b">Fish S2-Pro TTS (fishaudio/s2-pro, 5B params). FastAPI server exposed via Cloudflare Tunnel. Zero-shot voice cloning from reference audio. Generates WAVs + faster-whisper timestamps, uploads to user S3. Optional — fish.audio hosted API replaces it entirely.</div></div>
   <div class="card"><div class="card-h"><span class="badge bp">Layer 3</span> Lambda</div><div class="card-b">Remotion renderMediaOnLambda. Parallel frame rendering across ~50 Lambda functions. 2-min 720p video renders in ~30 sec. Costs ~$0.03–0.05/render.</div></div>
   <div class="card"><div class="card-h"><span class="badge ba">Layer 4</span> S3</div><div class="card-b">Per-user private bucket svgen-{userId}. Audio WAVs, transcript JSON, final MP4, voice refs, custom assets. Lifecycle: 30d audio, 7d video auto-expiry.</div></div>
 </div>
@@ -98,7 +98,7 @@ body,div,span,p{font-family:var(--font-sans)}
   <div class="row"><div class="sn">1</div><div style="flex:1"><div class="sh">Login → provision</div><div class="sd">Google OAuth via NextAuth. First login: create UUID, provision S3 bucket svgen-{userId} with private ACL + lifecycle rules. Store in DB. Subsequent logins skip.</div></div></div>
   <div class="row"><div class="sn">2</div><div style="flex:1"><div class="sh">Job creation → script gen</div><div class="sd">User picks duo, topic, style, background, voice mode. Next.js calls user's BYOK LLM key with the full system prompt → validates ScriptLine[] JSON → stores job in DB with status pending.</div></div></div>
   <div class="row"><div class="sn">3</div><div style="flex:1"><div class="sh">Presigned URL generation</div><div class="sd">Server generates presigned S3 PUT URLs for each expected file: audio/{jobId}/line_{n}.wav, transcripts/{jobId}/words.json, videos/{jobId}/final.mp4. Included in VoiceJobRequest.</div></div></div>
-  <div class="row"><div class="sn">4</div><div style="flex:1"><div class="sh">Voice stage (Colab or fish.audio API)</div><div class="sd">Colab: POST /voice/job → Fish S2-Pro generates all speaker WAVs + faster-whisper word timestamps → uploads directly to user S3 via presigned PUTs → sets status voice_done. Fish.audio API mode: Next.js proxies TTS calls, uploads to S3 itself.</div></div></div>
+  <div class="row"><div class="sn">4</div><div style="flex:1"><div class="sh">Voice stage (Colab or fish.audio API)</div><div class="sd">Colab: POST /voice/job → S2-Pro generates all speaker WAVs + faster-whisper word timestamps → uploads directly to user S3 via presigned PUTs → sets status voice_done. Fish.audio API mode: Next.js proxies TTS calls, uploads to S3 itself.</div></div></div>
   <div class="row"><div class="sn">5</div><div style="flex:1"><div class="sh">Render trigger</div><div class="sd">Next.js detects voice_done via polling → calls renderMediaOnLambda() with full ReelComposition inputProps including presigned GET URLs for audio + transcript. Stores renderId + bucketName in DB.</div></div></div>
   <div class="row"><div class="sn">6</div><div style="flex:1"><div class="sh">Lambda render</div><div class="sd">~50 Lambda functions render in parallel at 12 frames each. Remotion stitches chunks. Final MP4 uploaded to user S3 at videos/{jobId}/final.mp4. Lambda self-cleans after 7 days.</div></div></div>
   <div class="row"><div class="sn" style="background:var(--color-background-success);border-color:var(--color-border-success)">7</div><div style="flex:1"><div class="sh">Delivery</div><div class="sd">Server generates 1-hour presigned GET URL for final video. Frontend shows Remotion Player preview + download button. Optional: copy to user Google Drive.</div></div></div>
@@ -151,7 +151,7 @@ region: ap-east-1            (Mumbai — lowest latency for India)
 /voice-refs/{speakerId}/
     ref_1.wav                 user's uploaded reference clips
     ref_2.wav
-    speaker_tokens.pkl        encoded S2-Pro prompt tokens (Colab cache)
+    speaker_tokens.npy        encoded S2-Pro prompt tokens (Colab cache, /content/cache/refs/)
 /assets/
     packs/{packId}/
         background_1.mp4      user-uploaded custom backgrounds
@@ -220,38 +220,36 @@ recommendedEmotion text, recommendedRate float</div></div></div>
 </div>
 
 <div class="vd on" id="v-s2pro">
-<div class="card"><div class="card-h">Fish Speech 1.5 (S2-Pro family) on Colab</div><div class="card-b">
-  <div class="row"><div class="rl"><strong>Model:</strong> fishaudio/fish-speech-1.5 from HuggingFace (~1.5 GB). Download once per session, cache at /content/models/fish-speech/. Requires ~4GB VRAM → fits T4 free Colab GPU.</div></div>
-  <div class="row"><div class="rl"><strong>Zero-shot cloning:</strong> Pass 5–15 sec reference audio + transcript text. Model encodes speaker timbre as prompt_tokens. No fine-tuning. Cache tokens per speaker for the whole job session.</div></div>
-  <div class="row"><div class="rl"><strong>Batch inference:</strong> Send all lines for one speaker in a single call with the same prompt_tokens. ~3× faster than one call per line. Essential for staying within Colab session time.</div></div>
-  <div class="row"><div class="rl"><strong>Output:</strong> 44.1 kHz WAV per line. Concatenate with pause_ms silence gaps into master.wav. Upload per-line WAVs + master to S3 via presigned PUTs.</div></div>
-  <div class="row"><div class="rl"><strong>faster-whisper:</strong> Run on master.wav after TTS → word-level {word, start, end} timestamps → save as words.json to S3. Use large-v2 model for best accuracy.</div></div>
+<div class="card"><div class="card-h">fishaudio/s2-pro on Colab — zero-shot voice cloning</div><div class="card-b">
+  <div class="row"><div class="rl"><strong>Model:</strong> fishaudio/s2-pro from HuggingFace. 5B parameter dual-autoregressive TTS. ~9 GB sharded safetensors. Requires T4 (16GB VRAM) or better. Served via vllm-omni offline inference or fish-speech v2.0 library.</div></div>
+  <div class="row"><div class="rl"><strong>Emotion control:</strong> S2-Pro uses natural-language inline [tags]: [happy], [sad], [angry], [whisper], [excited], [shouting], [surprised]. Mapped from Brainclip emotion field → injected as prefix tags in synthesis text. Supports 15,000+ free-form tags.</div></div>
+  <div class="row"><div class="rl"><strong>Zero-shot cloning:</strong> Upload 5–15 sec reference audio → Colab encodes as prompt_tokens via encode_reference() → cached as /content/cache/refs/{cache_key}.npy. Reused across all lines for that speaker. Repeat jobs skip re-encoding entirely.</div></div>
+  <div class="row"><div class="rl"><strong>Output:</strong> 44.1 kHz WAV per line. Concatenated with pause_ms silence gaps into master.wav. Per-line WAVs + master + words.json uploaded to user S3 via presigned PUTs.</div></div>
+  <div class="row"><div class="rl"><strong>faster-whisper:</strong> Run on master.wav after TTS → word-level {word, start, end} timestamps → save as words.json to S3. large-v2 model.</div></div>
+  <div class="row"><div class="rl"><strong>VRAM budget (T4 16GB):</strong> ~10GB for BF16 weights + ~2GB KV cache + ~1GB audio buffers = fits with 0.80 gpu_memory_utilization. If OOM: set gpu_memory_utilization=0.65 or switch to SGLang server for better memory management.</div></div>
 </div></div>
-<div class="code">from fish_speech.inference import InferenceEngine
-import soundfile as sf, io, boto3
-
-engine = InferenceEngine("/content/models/fish-speech")
-
-# Encode reference once per speaker (cache per session)
+<div class="code"># Encode reference audio → cached prompt_tokens
 ref_tokens = engine.encode_reference(
     audio_path="/tmp/ref_a.wav",
     text="reference transcript text here"
 )
+# Cache as .npy for repeat jobs
+np.save("/content/cache/refs/speaker_a.npy", ref_tokens)
 
-lines_a = [l for l in script_lines if l["speaker"] == "A"]
-for line in lines_a:
-    wav_bytes = engine.tts(
-        text=line["text"],
-        prompt_tokens=ref_tokens,
-        emotion=line["emotion"],        # e.g. "excited"
-        speaking_rate=line["speaking_rate"],
-        temperature=line["temperature"],
-        top_p=0.7,
-        chunk_length=200,
-        normalize=True
-    )
-    # Upload to user S3 via presigned PUT
-    requests.put(presigned_urls[line["id"]], data=wav_bytes)</div>
+# S2-Pro inline emotion tags
+emotion_tag = {"excited": "[excited]", "whispering": "[whisper]"}[emotion]
+full_text = f"{emotion_tag} {line_text}"
+
+# Generate audio
+audio_tensor, sr = engine.generate(
+    text=full_text,
+    reference_tokens=ref_tokens,
+    max_tokens=2048,
+    temperature=0.7,
+    top_p=0.9,
+)
+audio = audio_tensor.float().cpu().numpy()
+# Upload to user S3 via presigned PUT</div>
 </div>
 
 <div class="vd" id="v-fishapi">
@@ -301,34 +299,38 @@ await s3.putObject({ Bucket: userBucket,
 </div>
 
 <div class="vd" id="v-emotion">
-<div class="card"><div class="card-h">Fish Audio prosody + emotion parameters — full reference</div></div>
+<div class="card"><div class="card-h">S2-Pro emotion + prosody parameters — full reference</div></div>
 <div class="two">
   <div class="card"><div class="card-b">
-    <div class="row"><div class="rl"><strong>emotion:</strong> neutral · happy · sad · angry · surprised · excited · whispering · shouting. Set per ScriptLine by the LLM based on dialogue context.</div></div>
-    <div class="row"><div class="rl"><strong>speaking_rate:</strong> 0.75–1.25. Slow dramatic = 0.8. Normal = 1.0. Fast energetic = 1.2. Per-line override in script JSON.</div></div>
-    <div class="row"><div class="rl"><strong>pause_ms:</strong> 150–800ms silence inserted between lines. Questions: 400–600ms. Punchlines: 600–800ms. Standard turn: 200ms.</div></div>
-    <div class="row"><div class="rl"><strong>temperature:</strong> 0.5 (stable) → 0.7 (natural) → 1.0 (expressive). Per-speaker setting, not per-line.</div></div>
+    <div class="row"><div class="rl"><strong>emotion (S2-Pro inline tags):</strong> neutral → no tag. happy → [happy]. sad → [sad]. angry → [angry]. surprised → [surprised]. excited → [excited]. whispering → [whisper]. shouting → [shouting]. Tag injected as prefix to synthesis text.</div></div>
+    <div class="row"><div class="rl"><strong>Free-form tags (S2-Pro only):</strong> Supports 15,000+ natural language descriptions: [professional broadcast tone], [whisper in small voice], [pitch up], [laughing tone], [interrupting]. Not used by default LLM prompt but available in script editor.</div></div>
+    <div class="row"><div class="rl"><strong>speaking_rate:</strong> 0.75–1.25. Slow dramatic = 0.8. Normal = 1.0. Fast energetic = 1.2. Per-line override.</div></div>
+    <div class="row"><div class="rl"><strong>pause_ms:</strong> 150–800ms silence inserted between lines. Questions: 400–600ms. Punchlines: 600–800ms. Standard: 200ms.</div></div>
+    <div class="row"><div class="rl"><strong>temperature:</strong> 0.5 (stable) → 0.7 (natural) → 1.0 (expressive). Per-speaker setting.</div></div>
   </div></div>
   <div class="card"><div class="card-b">
-    <div class="row"><div class="rl"><strong>top_p:</strong> 0.6–0.9. Lower = more deterministic, better for consistent character voices. Use 0.7 as default.</div></div>
-    <div class="row"><div class="rl"><strong>chunk_length:</strong> 100–300 chars per synthesis chunk. 200 is optimal — longer gives more natural prosody across sentences.</div></div>
+    <div class="row"><div class="rl"><strong>top_p:</strong> 0.6–0.9. Lower = more deterministic. Use 0.9 for natural, 0.7 for consistent voices.</div></div>
+    <div class="row"><div class="rl"><strong>chunk_length:</strong> 100–300 chars per synthesis chunk. 200 is default.</div></div>
     <div class="row"><div class="rl"><strong>normalize:</strong> Auto text normalisation for numbers, abbreviations, punctuation. Always true.</div></div>
-    <div class="row"><div class="rl"><strong>language:</strong> Auto-detect or explicit — en, zh, ja, ko, hi, fr, de, es, ar. S2-Pro handles code-switching (e.g. Hinglish).</div></div>
+    <div class="row"><div class="rl"><strong>language:</strong> 80+ languages. Tier 1: en, zh, ja (highest quality). Tier 2: hi, ko, es, fr, de, ar, pt, etc. S2-Pro handles code-switching natively (Hinglish works well).</div></div>
   </div></div>
 </div>
 </div>
 
 <div class="vd" id="v-colab">
 <div class="card"><div class="card-h">Colab FastAPI server — full spec</div><div class="card-b">
-  <div class="row"><div class="rl"><strong>Startup:</strong> Notebook cell installs fish-speech, faster-whisper, fastapi, uvicorn, cloudflared. Starts FastAPI on port 8000. Runs cloudflare tunnel → prints public URL. User pastes URL into app settings.</div></div>
-  <div class="row"><div class="rl"><strong>Session persistence:</strong> Models stay loaded in memory across jobs. Speaker token cache lives in /content/cache/. Background video packs cached in /content/bgcache/. All cleared on session end.</div></div>
-  <div class="row"><div class="rl"><strong>Health check:</strong> GET /health returns {status, models_loaded, gpu_memory_free, session_id}. App checks this before dispatching every job.</div></div>
+  <div class="row"><div class="rl"><strong>Startup:</strong> Notebook cells: (1) install vllm, fish-speech, faster-whisper, fastapi deps; (2) download fishaudio/s2-pro (~9 GB); (3) start uvicorn server + cloudflared tunnel. Prints public URL for app settings.</div></div>
+  <div class="row"><div class="rl"><strong>Session persistence:</strong> S2-Pro model + whisper model stay in GPU/CPU memory. Reference token cache lives in /content/cache/refs/. Job state persists in Python dict. All cleared on Colab session end.</div></div>
+  <div class="row"><div class="rl"><strong>GPU monitoring:</strong> /health returns gpu_mem_free_gb, gpu_util_pct, engine_type (vllm-omni | fish-speech | none). App shows "X GB GPU free | Y% utilized" in settings UI.</div></div>
+  <div class="row"><div class="rl"><strong>Error stages:</strong> model_oom (restart runtime), gpu_low_memory (stop job), synthesis_error (per-line failure), upload_failed (S3 issue). All surfaced to user with actionable messages.</div></div>
 </div></div>
-<div class="code">GET  /health              → {status, models_loaded, gpu_mb_free}
-POST /voice/job           → accept VoiceJobRequest, return {jobId} immediately
-GET  /voice/job/{jobId}   → {stage, progressPct, error?}
-POST /voice/encode-ref    → encode reference clip, return cache_key
-DELETE /voice/cache/{key} → clear cached speaker tokens</div>
+<div class="code">GET  /health                           → {status, model, models_loaded, engine_type, gpu_mem_free_gb, gpu_util_pct, gpu_ok, session_id}
+GET  /voice/job/{jobId}                → {stage, progressPct, error?, gpuMemFreeGb?}
+POST /voice/job                        → accept VoiceJobRequest, return {jobId} immediately (async)
+POST /voice/encode-ref                  → download S3 ref clip, encode tokens, return {cacheKey, speaker}
+POST /voice/clone  (multipart/form)    → upload ref clip directly, encode tokens, return {cacheKey, speaker}
+DELETE /voice/cache/{cacheKey}          → delete one cached speaker token file
+DELETE /voice/cache                    → clear all cached speaker tokens</div>
 </div>
 </div>
 

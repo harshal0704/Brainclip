@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { InferenceClient } from "@huggingface/inference";
 
 import { AppError } from "@/lib/errors";
 
@@ -20,6 +21,7 @@ const jobSpeakerConfigSchema = z.object({
   stickerUrl: z.string().default(""),
   position: z.enum(["top", "bottom"]).default("top"),
   modelId: z.string().optional(),
+  refText: z.string().optional(),
 });
 
 const presignedUrlsSchema = z.object({
@@ -251,6 +253,68 @@ export const synthesizeFishAudioLine = async ({
   );
 };
 
+export type ColabHealth = {
+  status: string;
+  model: string;
+  models_loaded: boolean;
+  engine_type: string;
+  gpu_mem_free_gb: number | null;
+  gpu_mem_total_gb: number | null;
+  gpu_util_pct: number | null;
+  gpu_ok: boolean;
+  session_id: string;
+  gpu_vram_gb: number;
+};
+
+export type ColabJobStatus = {
+  stage: string;
+  progressPct: number;
+  error?: string;
+  gpuMemFreeGb?: number;
+};
+
+export async function checkColabHealth(colabUrl: string): Promise<ColabHealth | null> {
+  try {
+    const res = await fetch(new URL("/health", colabUrl), {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    return res.json() as Promise<ColabHealth>;
+  } catch {
+    return null;
+  }
+}
+
+export async function triggerColabRefEncode(
+  colabUrl: string,
+  refAudioUrl: string,
+  refText: string,
+  speaker: "A" | "B"
+): Promise<{ cacheKey: string; speaker: string }> {
+  const res = await fetch(new URL("/voice/encode-ref", colabUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ refAudioUrl, refText, speaker }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new AppError(
+      "colab_ref_encode_failed",
+      body || `Colab ref encode failed: ${res.status}`,
+      "Failed to encode reference audio on your Colab session.",
+      502
+    );
+  }
+  return res.json() as Promise<{ cacheKey: string; speaker: string }>;
+}
+
+export async function clearColabCache(colabUrl: string, cacheKey?: string): Promise<void> {
+  const url = cacheKey
+    ? new URL(`/voice/cache/${cacheKey}`, colabUrl)
+    : new URL("/voice/cache", colabUrl);
+  await fetch(url, { method: cacheKey ? "DELETE" : "DELETE" });
+}
+
 export async function dispatchColabVoiceJob(job: VoiceJob, presignedUrls: PresignedVoiceUrls) {
   const payload = voiceJobSchema.parse({ ...job, presignedUrls });
 
@@ -271,7 +335,7 @@ export async function dispatchColabVoiceJob(job: VoiceJob, presignedUrls: Presig
     throw new AppError("colab_dispatch_failed", body || `Colab dispatch failed with status ${response.status}`, "Your Colab session appears offline or rejected the job.", 502);
   }
 
-  return response.json();
+  return response.json() as Promise<ColabJobStatus>;
 }
 
 export async function dispatchFishApiVoiceJob(job: VoiceJob, userFishKey: string) {
@@ -332,6 +396,165 @@ export async function dispatchFishApiVoiceJob(job: VoiceJob, userFishKey: string
     durations.push(parsedWav.durationSec);
 
     await uploadToPresignedUrl(payload.presignedUrls.lines[line.id], new Uint8Array(audioBuffer), "audio/wav");
+  }
+
+  const transcript = buildSyntheticTranscript(payload.lines, durations);
+  await uploadToPresignedUrl(payload.presignedUrls.transcript, JSON.stringify(transcript.wordTimings), "application/json");
+
+  if (wavMeta) {
+    const masterWav = buildWav(wavMeta, masterChunks);
+    await uploadToPresignedUrl(payload.presignedUrls.master, masterWav, "audio/wav");
+  }
+
+  return {
+    stage: "voice_done",
+    progressPct: 100,
+    transcript,
+  };
+}
+
+export async function dispatchElevenLabsVoiceJob(job: VoiceJob, elevenLabsApiKey: string) {
+  const payload = voiceJobSchema.parse(job);
+
+  if (!elevenLabsApiKey) {
+    throw new AppError("elevenlabs_key_missing", "Missing Eleven Labs API key", "Add your Eleven Labs API key in settings first.", 400);
+  }
+
+  let wavMeta: Pick<WavMeta, "sampleRate" | "channels" | "bitsPerSample"> | null = null;
+  const masterChunks: Uint8Array[] = [];
+  const durations: number[] = [];
+
+  for (const line of payload.lines) {
+    const speakerConfig = line.speaker === "A" ? payload.speakerA : payload.speakerB;
+
+    if (!speakerConfig.modelId) {
+      throw new AppError(
+        "elevenlabs_voice_missing",
+        `Missing Eleven Labs voice ID for speaker ${line.speaker}`,
+        `Speaker ${line.speaker} is missing an Eleven Labs voice ID. Update your voice settings and try again.`,
+        400,
+      );
+    }
+
+    // Call Eleven Labs API
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${speakerConfig.modelId}?output_format=wav_24000`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": elevenLabsApiKey,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        text: line.text,
+        model_id: "eleven_multilingual_v2",
+        // Additional settings could be adjusted here based on 'emotion', 'speaking_rate', etc. if needed
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      const userMessage = response.status === 401 ? "Your Eleven Labs API key is invalid." : "Eleven Labs could not generate the voice lines. You may have run out of credits.";
+      throw new AppError("elevenlabs_api_failed", errorBody || `Eleven Labs API failed with status ${response.status}`, userMessage, 502);
+    }
+
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    const parsedWav = parseWav(audioBuffer);
+
+    if (!wavMeta) {
+      wavMeta = {
+        sampleRate: parsedWav.sampleRate,
+        channels: parsedWav.channels,
+        bitsPerSample: parsedWav.bitsPerSample,
+      };
+    }
+
+    if (
+      wavMeta.sampleRate !== parsedWav.sampleRate ||
+      wavMeta.channels !== parsedWav.channels ||
+      wavMeta.bitsPerSample !== parsedWav.bitsPerSample
+    ) {
+      throw new AppError("wav_incompatible", "Eleven Labs API returned WAV files with mismatched formats", "Generated voice lines used incompatible audio formats.", 502);
+    }
+
+    masterChunks.push(parsedWav.pcmData, createSilence(wavMeta, line.pause_ms));
+    durations.push(parsedWav.durationSec);
+
+    await uploadToPresignedUrl(payload.presignedUrls.lines[line.id], new Uint8Array(audioBuffer), "audio/wav");
+  }
+
+  const transcript = buildSyntheticTranscript(payload.lines, durations);
+  await uploadToPresignedUrl(payload.presignedUrls.transcript, JSON.stringify(transcript.wordTimings), "application/json");
+
+  if (wavMeta) {
+    const masterWav = buildWav(wavMeta, masterChunks);
+    await uploadToPresignedUrl(payload.presignedUrls.master, masterWav, "audio/wav");
+  }
+
+  return {
+    stage: "voice_done",
+    progressPct: 100,
+    transcript,
+  };
+}
+
+export async function dispatchHuggingFaceVoiceJob(job: VoiceJob, hfToken: string) {
+  const payload = voiceJobSchema.parse(job);
+
+  if (!hfToken) {
+    throw new AppError("hf_key_missing", "Missing Hugging Face Token", "Add your Hugging Face Token in settings first.", 400);
+  }
+
+  const client = new InferenceClient(hfToken);
+  let wavMeta: Pick<WavMeta, "sampleRate" | "channels" | "bitsPerSample"> | null = null;
+  const masterChunks: Uint8Array[] = [];
+  const durations: number[] = [];
+
+  for (const line of payload.lines) {
+    const speakerConfig = line.speaker === "A" ? payload.speakerA : payload.speakerB;
+
+    if (!speakerConfig.modelId) {
+      throw new AppError(
+        "hf_model_missing",
+        `Missing Hugging Face model for speaker ${line.speaker}`,
+        `Speaker ${line.speaker} is missing a Hugging Face model. Update your voice settings and try again.`,
+        400,
+      );
+    }
+
+    try {
+      const audioBlob = await client.textToSpeech({
+        provider: "fal-ai",
+        model: speakerConfig.modelId,
+        inputs: line.text,
+      });
+
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioBuffer = Buffer.from(arrayBuffer);
+
+      const parsedWav = parseWav(audioBuffer);
+
+      if (!wavMeta) {
+        wavMeta = {
+          sampleRate: parsedWav.sampleRate,
+          channels: parsedWav.channels,
+          bitsPerSample: parsedWav.bitsPerSample,
+        };
+      }
+
+      if (
+        wavMeta.sampleRate !== parsedWav.sampleRate ||
+        wavMeta.channels !== parsedWav.channels ||
+        wavMeta.bitsPerSample !== parsedWav.bitsPerSample
+      ) {
+        throw new AppError("wav_incompatible", "HF API returned WAV files with mismatched formats", "Generated voice lines used incompatible audio formats.", 502);
+      }
+
+      masterChunks.push(parsedWav.pcmData, createSilence(wavMeta, line.pause_ms));
+      durations.push(parsedWav.durationSec);
+
+      await uploadToPresignedUrl(payload.presignedUrls.lines[line.id], new Uint8Array(audioBuffer), "audio/wav");
+    } catch (error: any) {
+      throw new AppError("hf_api_failed", `Hugging Face API failed: ${error.message}`, "Hugging Face could not generate the voice lines. Check your token and model.", 502);
+    }
   }
 
   const transcript = buildSyntheticTranscript(payload.lines, durations);

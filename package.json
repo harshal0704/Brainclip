@@ -16,6 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1013.0",
     "@aws-sdk/s3-request-presigner": "^3.1013.0",
+    "@huggingface/inference": "^4.13.15",
     "@neondatabase/serverless": "^1.0.2",
     "@remotion/lambda": "^4.0.438",
     "@remotion/player": "^4.0.438",

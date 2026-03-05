@@ -17,7 +17,12 @@ const pollColabStatus = async (colabUrl: string, jobId: string) => {
     throw new AppError("colab_offline", `Colab status polling failed: ${response.status}`, "Your Colab session seems offline. Restart it or switch to Fish.audio mode.", 502);
   }
 
-  return response.json() as Promise<{ stage?: string; progressPct?: number; error?: string }>;
+  return response.json() as Promise<{
+    stage?: string;
+    progressPct?: number;
+    error?: string;
+    gpuMemFreeGb?: number;
+  }>;
 };
 
 const hasObject = async (bucket: string, key: string, region?: string) => {
@@ -136,7 +141,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
         resolvedVoiceStage = {
           status: isVoiceDone ? "voice_done" : (localVoiceStage.status === "pending" ? "voice_processing" : localVoiceStage.status),
-          stage: isVoiceDone ? "Voice assets ready" : remoteStage,
+          stage: isVoiceDone
+            ? "Voice assets ready"
+            : remoteStage + (remote.gpuMemFreeGb ? ` (GPU ${remote.gpuMemFreeGb}GB free)` : ""),
           progressPct: isVoiceDone ? 60 : Math.max(localVoiceStage.progressPct, Math.min(59, remoteProgress)),
         };
 

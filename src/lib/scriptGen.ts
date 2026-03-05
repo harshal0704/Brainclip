@@ -125,7 +125,13 @@ const normalizeScriptLines = (input: unknown, params: GenerateScriptParams): Scr
 
   for (const [index, rawLine] of parsed.entries()) {
     const speaker = rawLine.speaker === "B" ? "B" : "A";
-    const text = typeof rawLine.text === "string" ? rawLine.text.trim() : "";
+    // Strip invisible Unicode characters and normalize whitespace
+    const rawText = typeof rawLine.text === "string" ? rawLine.text : "";
+    const text = rawText
+      .replace(/^[\u200B-\u200D\uFEFF\r\n]+/, "") // Remove leading invisible chars
+      .replace(/[\u200B-\u200D\uFEFF]+/g, "") // Remove mid-text invisible chars
+      .replace(/\s+/g, " ") // Normalize whitespace
+      .trim();
 
     if (!text) {
       throw new AppError("llm_invalid_line", `Line ${index + 1} is missing text`, "Script generation returned an invalid line.", 502);
