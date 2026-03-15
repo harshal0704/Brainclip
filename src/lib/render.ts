@@ -11,7 +11,7 @@ export const renderProgressRequestSchema = z.object({
 type JobRecord = typeof jobs.$inferSelect;
 
 const getRenderEnv = () => {
-  const region = process.env.AWS_REGION as "ap-east-1" | undefined;
+  const region = process.env.AWS_REGION as "us-east-1" | undefined;
   const functionName = process.env.REMOTION_FUNCTION_NAME;
   const serveUrl = process.env.REMOTION_SERVE_URL;
 
@@ -111,11 +111,12 @@ export async function triggerLambdaRender(job: JobRecord, inputProps: Record<str
       inputProps,
       codec: "h264",
       imageFormat: "jpeg",
-      framesPerLambda: 12,
+      framesPerLambda: 10,
       privacy: "private",
       deleteAfter: "7-days",
       outName: job.s3VideoKey?.split("/").pop() ?? "final.mp4",
       downloadBehavior: {type: "play-in-browser"},
+      timeoutInMilliseconds: 110000,
     });
 
     return {

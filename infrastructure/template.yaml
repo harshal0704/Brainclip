@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Brainclip Remotion Lambda render function
+Resources:
+  RemotionLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../remotion/
+      Description: Renders a Remotion video for Brainclip.
+      MemorySize: 2048
+      Timeout: 120
+      Handler: index.handler
+      Runtime: nodejs24.x
+      Architectures:
+        - arm64
+      EphemeralStorage:
+        Size: 10240
+      Environment:
+        Variables:
+          AWS_REGION: !Ref AWS::Region
+      EventInvokeConfig:
+        MaximumEventAgeInSeconds: 21600
+        MaximumRetryAttempts: 0
+        DestinationConfig: {}
+      Layers:
+        - >-
+          arn:aws:lambda:us-east-1:678892195805:layer:remotion-binaries-fonts-arm64:29
+        - >-
+          arn:aws:lambda:us-east-1:678892195805:layer:remotion-binaries-chromium-arm64:37
+        - >-
+          arn:aws:lambda:us-east-1:678892195805:layer:remotion-binaries-emoji-google-arm64:12
+        - >-
+          arn:aws:lambda:us-east-1:678892195805:layer:remotion-binaries-cjk-arm64:12
+      PackageType: Zip
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Sid: Logs
+              Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+              Resource:
+                - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda-insights
+            - Sid: LogsWrite
+              Effect: Allow
+              Action:
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource:
+                - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/remotion-render-*
+                - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda-insights:*
+            - Sid: InvokeOtherRemotionFunctions
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource:
+                - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:remotion-render-*
+      RecursiveLoop: Terminate
+      SnapStart:
+        ApplyOn: None
+      Tags:
+        - Key: remotion-ephemereal-storage-in-mb
+          Value: '10240'
+        - Key: remotion-lambda
+          Value: 'true'
+        - Key: remotion-memory-in-mb
+          Value: '2048'
+        - Key: remotion-timeout-in-seconds
+          Value: '120'
+        - Key: remotion-version
+          Value: 4.0.438
+      RuntimeManagementConfig:
+        UpdateRuntimeOn: Manual
+        RuntimeVersionArn: >-
+          arn:aws:lambda:us-east-1::runtime:58a37e8413ed69058c4ac3b1df642118591f17d40def93d6101f867c72cd03c2
+
+  RemotionLambdaS3AccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RemotionLambdaS3Policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ListAllBuckets
+                Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                Resource: '*'
+              - Sid: RemotionLambdaBuckets
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource:
+                  - !Sub arn:aws:s3:::remotionlambda-${AWS::Region}-*
+                  - !Sub arn:aws:s3:::remotionlambda-${AWS::Region}-*/*
+                  - !Sub arn:aws:s3:::brainclips-videos
+                  - !Sub arn:aws:s3:::brainclips-videos/*
+                  - !Sub arn:aws:s3:::brainclip-presets
+                  - !Sub arn:aws:s3:::brainclip-presets/*
+                  - !Sub arn:aws:s3:::svgen-*
+                  - !Sub arn:aws:s3:::svgen-*/*
+                  - !Sub arn:aws:s3:::brainclips-${AWS::Region}-*
+                  - !Sub arn:aws:s3:::brainclips-${AWS::Region}-*/*
+
+Outputs:
+  RemotionLambdaFunctionArn:
+    Description: ARN of the Remotion Lambda function
+    Value: !GetAtt RemotionLambdaFunction.Arn
+  RemotionLambdaFunctionName:
+    Description: Name of the Remotion Lambda function
+    Value: !Ref RemotionLambdaFunction
