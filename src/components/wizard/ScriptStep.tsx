@@ -106,7 +106,7 @@ export const ScriptStep = ({
 
       {scriptLines.length === 0 ? (
         <div className="empty-script">
-          <p>Enter a topic and click "Generate Script" to create your dialogue.</p>
+          <p>Enter a topic and click &quot;Generate Script&quot; to create your dialogue.</p>
           <p className="hint">You can edit each line after generation.</p>
         </div>
       ) : (

@@ -91,6 +91,7 @@ export const ConceptStep = ({ form, onFormChange, onUploadSticker, message }: Co
             />
             {form.stickerUrlA && (
               <div className="sticker-preview">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={form.stickerUrlA} alt="Speaker A sticker" />
                 <span>✓ Custom sticker uploaded</span>
               </div>
@@ -126,6 +127,7 @@ export const ConceptStep = ({ form, onFormChange, onUploadSticker, message }: Co
             />
             {form.stickerUrlB && (
               <div className="sticker-preview">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={form.stickerUrlB} alt="Speaker B sticker" />
                 <span>✓ Custom sticker uploaded</span>
               </div>
