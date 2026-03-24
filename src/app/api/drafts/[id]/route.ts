@@ -30,14 +30,49 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   try {
     const user = await requireUserFromRequest(request);
     const body = await request.json();
-    const { name, formState, scriptLines } = body;
+
+    const {
+      topic,
+      duoId,
+      speakerAPersona,
+      speakerBPersona,
+      voiceMode,
+      subtitleStyle,
+      stickerAnim,
+      stickerUrlA,
+      stickerUrlB,
+      backgroundUrl,
+      bgDimOpacity,
+      showProgressBar,
+      assetPackId,
+      resolution,
+      ctaText,
+      scriptLines,
+      fishModelA,
+      fishModelB,
+    } = body;
 
     const [updatedDraft] = await db
       .update(drafts)
       .set({
-        name: name || formState.topic || "Untitled Draft",
-        formState,
-        scriptLines,
+        ...(topic && { topic }),
+        ...(duoId && { duoId }),
+        ...(speakerAPersona && { speakerAPersona }),
+        ...(speakerBPersona && { speakerBPersona }),
+        ...(voiceMode && { voiceMode }),
+        ...(subtitleStyle && { subtitleStyle }),
+        ...(stickerAnim && { stickerAnim }),
+        ...(stickerUrlA && { stickerUrlA }),
+        ...(stickerUrlB && { stickerUrlB }),
+        ...(backgroundUrl !== undefined && { backgroundUrl }),
+        ...(bgDimOpacity !== undefined && { bgDimOpacity }),
+        ...(showProgressBar !== undefined && { showProgressBar }),
+        ...(assetPackId && { assetPackId }),
+        ...(resolution && { resolution }),
+        ...(ctaText !== undefined && { ctaText }),
+        ...(scriptLines && { scriptLines }),
+        ...(fishModelA && { fishModelA }),
+        ...(fishModelB && { fishModelB }),
         updatedAt: new Date(),
       })
       .where(and(eq(drafts.id, params.id), eq(drafts.userId, user.id)))
