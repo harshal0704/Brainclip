@@ -13,7 +13,6 @@ node_modules/
 out/
 build/
 dist/
-tsconfig.tsbuildinfo
 
 # Testing
 coverage/
@@ -23,7 +22,6 @@ what_to_do/
 .agents/
 .opencode/
 skills-lock.json
-nul
 
 # Misc
 .DS_Store
@@ -31,12 +29,3 @@ nul
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Temp / Test files
-test-api.js
-test_crypto.mjs
-tmp.mjs
-tmp.js
-tmp2.mjs
-tmp_zod_test.mjs
-origin.txt

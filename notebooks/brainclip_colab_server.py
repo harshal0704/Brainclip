@@ -16,7 +16,7 @@ import requests
 import soundfile as sf
 import torch
 import transformers
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, BackgroundTasks
 from faster_whisper import WhisperModel
 from pydantic import BaseModel, Field
 
@@ -522,3 +522,64 @@ def clear_all_cache() -> dict[str, Any]:
             f.unlink()
             removed += 1
     return {"removed": removed}
+
+
+class RenderRequest(BaseModel):
+    jobId: str
+    inputProps: dict[str, Any]
+    s3PutUrl: str
+
+@app.post("/render")
+async def start_render(req: RenderRequest, background_tasks: BackgroundTasks):
+    job_id = req.jobId
+    job_store[job_id] = {"stage": "rendering", "progressPct": 0}
+    
+    def render_task():
+        try:
+            import json
+            import subprocess
+            import requests
+            
+            # Save input props
+            with open(f"/content/input_{job_id}.json", "w") as f:
+                json.dump(req.inputProps, f)
+            
+            # Install remotion dependencies if not already done
+            subprocess.run(["npm", "install"], cwd="/content/remotion", check=False)
+            
+            # Run remotion (note: we are in /content, remotion is in /content/remotion)
+            cmd = [
+                "npx", "remotion", "render", "ReelComposition", 
+                f"/content/out_{job_id}.mp4", 
+                f"--props=/content/input_{job_id}.json",
+                "--browser-executable=/usr/bin/chromium-browser"
+            ]
+            
+            process = subprocess.Popen(cmd, cwd="/content/remotion", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            
+            for line in process.stdout:
+                print(f"[Render {job_id}] {line}", end="")
+                
+            process.wait()
+            
+            if process.returncode != 0:
+                job_store[job_id] = {"stage": "failed", "error": "Remotion render failed"}
+                return
+                
+            # Upload to S3
+            out_file = f"/content/out_{job_id}.mp4"
+            with open(out_file, "rb") as f:
+                r = requests.put(req.s3PutUrl, data=f, headers={"Content-Type": "video/mp4"})
+                if not r.ok:
+                    job_store[job_id] = {"stage": "failed", "error": f"S3 upload failed: {r.status_code}"}
+                    return
+                    
+            job_store[job_id] = {"stage": "done", "progressPct": 100}
+            print(f"[Render {job_id}] S3 upload complete!")
+            
+        except Exception as e:
+            job_store[job_id] = {"stage": "failed", "error": str(e)}
+            print(f"[Render {job_id}] Error: {str(e)}")
+
+    background_tasks.add_task(render_task)
+    return {"status": "started", "jobId": job_id}

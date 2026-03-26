@@ -34,6 +34,7 @@ export const users = pgTable("users", {
   colabUrl: text("colab_url"),
   colabHealthy: boolean("colab_healthy").default(false).notNull(),
   ttsProvider: text("tts_provider").default("fish").notNull(),
+  renderProvider: text("render_provider").default("lambda").notNull(),
   fishApiKey: text("fish_api_key"),
   fishModelA: text("fish_model_a"),
   fishModelB: text("fish_model_b"),

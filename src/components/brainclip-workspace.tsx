@@ -34,6 +34,7 @@ type SettingsState = {
   llmModel: string;
   llmApiKey: string;
   ttsProvider: "fish" | "huggingface" | "elevenlabs";
+  renderProvider: "lambda" | "colab";
   fishModelA: string;
   fishModelB: string;
   fishApiKey: string;
@@ -67,6 +68,7 @@ const defaultSettings: SettingsState = {
   llmModel: "gemini-1.5-flash",
   llmApiKey: "",
   ttsProvider: "fish",
+  renderProvider: "lambda",
   fishModelA: voicePresetCatalog[0]?.fishModelId ?? "",
   fishModelB: voicePresetCatalog[1]?.fishModelId ?? "",
   fishApiKey: "",

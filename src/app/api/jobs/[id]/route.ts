@@ -6,7 +6,7 @@ import { jobs } from "@/db/schema";
 import { db } from "@/lib/db";
 import { AppError, toErrorResponse } from "@/lib/errors";
 import { buildRenderInputProps, getSpeakerConfigsFromVoiceMap } from "@/lib/jobs";
-import { getLambdaRenderProgress, getRenderFailureMessage, triggerLambdaRender } from "@/lib/render";
+import { getLambdaRenderProgress, getRenderFailureMessage, triggerLambdaRender, triggerColabRender } from "@/lib/render";
 import { copyObject, headObject } from "@/lib/s3";
 import { requireOwnedJob } from "@/lib/session";
 
@@ -213,16 +213,30 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       });
 
       try {
-        const render = await triggerLambdaRender(nextJob, inputProps);
+        let renderId = "";
+        let bucketName = "";
+        let stage = "Rendering video";
+
+        if (user.renderProvider === "colab" && user.colabUrl) {
+          const render = await triggerColabRender(nextJob, inputProps, user.colabUrl, user.s3Bucket, user.s3Region || "us-east-1");
+          renderId = render.renderId;
+          bucketName = render.bucketName;
+          stage = "Rendering video on Colab server";
+        } else {
+          const render = await triggerLambdaRender(nextJob, inputProps);
+          renderId = render.renderId;
+          bucketName = render.bucketName;
+          stage = "Rendering video with Remotion Lambda";
+        }
 
         const [updatedJob] = await db
           .update(jobs)
           .set({
             status: "rendering",
-            stage: "Rendering video with Remotion Lambda",
+            stage,
             progressPct: 70,
-            lambdaRenderId: render.renderId,
-            lambdaBucket: render.bucketName,
+            lambdaRenderId: renderId,
+            lambdaBucket: bucketName,
             updatedAt: new Date(),
           })
           .where(eq(jobs.id, nextJob.id))
@@ -241,51 +255,85 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     if (nextJob.status === "rendering" && nextJob.lambdaRenderId && nextJob.lambdaBucket) {
       try {
-        const progress = await getLambdaRenderProgress({
-          renderId: nextJob.lambdaRenderId,
-          bucketName: nextJob.lambdaBucket,
-        });
+        const isColab = nextJob.lambdaRenderId.startsWith("colab-");
 
-        if (progress.fatalErrorEncountered) {
-          return failJob({
-            jobId: nextJob.id,
-            progressPct: nextJob.progressPct,
-            error: progress.errors[0]?.message ?? new Error("Remotion reported a fatal render error."),
-            fallbackStage: "Render failed",
+        if (isColab && user.s3Bucket && nextJob.s3VideoKey) {
+          const isDone = await hasObject(user.s3Bucket, nextJob.s3VideoKey, user.s3Region);
+          
+          if (isDone) {
+            const [updatedJob] = await db
+              .update(jobs)
+              .set({
+                status: "done",
+                stage: "Render complete",
+                progressPct: 100,
+                updatedAt: new Date(),
+              })
+              .where(eq(jobs.id, nextJob.id))
+              .returning();
+            nextJob = updatedJob;
+          } else {
+            // Still rendering, gently bump progress to show activity
+            const newProgress = Math.min(95, nextJob.progressPct + 1);
+            if (newProgress !== nextJob.progressPct) {
+              const [updatedJob] = await db
+                .update(jobs)
+                .set({
+                  progressPct: newProgress,
+                  updatedAt: new Date(),
+                })
+                .where(eq(jobs.id, nextJob.id))
+                .returning();
+              nextJob = updatedJob;
+            }
+          }
+        } else {
+          const progress = await getLambdaRenderProgress({
+            renderId: nextJob.lambdaRenderId,
+            bucketName: nextJob.lambdaBucket,
           });
+
+          if (progress.fatalErrorEncountered) {
+            return failJob({
+              jobId: nextJob.id,
+              progressPct: nextJob.progressPct,
+              error: progress.errors[0]?.message ?? new Error("Remotion reported a fatal render error."),
+              fallbackStage: "Render failed",
+            });
+          }
+
+          if (progress.done && progress.outKey && progress.outBucket && user.s3Bucket && nextJob.s3VideoKey) {
+            await copyObject({
+              sourceBucket: progress.outBucket,
+              sourceKey: progress.outKey,
+              destinationBucket: user.s3Bucket,
+              destinationKey: nextJob.s3VideoKey,
+              region: user.s3Region,
+              contentType: "video/mp4",
+            });
+          }
+
+          const renderProgressPct = Math.max(70, Math.round(progress.overallProgress * 100));
+          const stage = progress.done
+            ? "Render complete"
+            : `Rendering video with Remotion Lambda (${renderProgressPct}%)`;
+
+          const [updatedJob] = await db
+            .update(jobs)
+            .set({
+              status: progress.done ? "done" : "rendering",
+              stage,
+              progressPct: progress.done ? 100 : renderProgressPct,
+              s3VideoKey: nextJob.s3VideoKey ?? progress.outKey,
+              lambdaBucket: progress.outBucket ?? nextJob.lambdaBucket,
+              errorMessage: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(jobs.id, nextJob.id))
+            .returning();
+
+          nextJob = updatedJob;
         }
-
-        if (progress.done && progress.outKey && progress.outBucket && user.s3Bucket && nextJob.s3VideoKey) {
-          await copyObject({
-            sourceBucket: progress.outBucket,
-            sourceKey: progress.outKey,
-            destinationBucket: user.s3Bucket,
-            destinationKey: nextJob.s3VideoKey,
-            region: user.s3Region,
-            contentType: "video/mp4",
-          });
-        }
-
-        const renderProgressPct = Math.max(70, Math.round(progress.overallProgress * 100));
-        const stage = progress.done
-          ? "Render complete"
-          : `Rendering video with Remotion Lambda (${renderProgressPct}%)`;
-
-        const [updatedJob] = await db
-          .update(jobs)
-          .set({
-            status: progress.done ? "done" : "rendering",
-            stage,
-            progressPct: progress.done ? 100 : renderProgressPct,
-            s3VideoKey: nextJob.s3VideoKey ?? progress.outKey,
-            lambdaBucket: progress.outBucket ?? nextJob.lambdaBucket,
-            errorMessage: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(jobs.id, nextJob.id))
-          .returning();
-
-        nextJob = updatedJob;
       } catch (error) {
         return failJob({
           jobId: nextJob.id,

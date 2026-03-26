@@ -1,4 +1,5 @@
 import {z} from "zod";
+import { presignedPut } from "@/lib/s3";
 
 import {jobs} from "@/db/schema";
 import {AppError} from "@/lib/errors";
@@ -157,4 +158,61 @@ export async function getLambdaFunctions() {
   } catch (error) {
     throw toReadableRenderError(error, "health");
   }
+}
+
+
+export async function triggerColabRender(
+  job: JobRecord,
+  inputProps: Record<string, unknown>,
+  colabUrl: string,
+  bucketName: string,
+  region: string
+) {
+  if (!colabUrl) {
+    throw new AppError(
+      "colab_url_missing",
+      "Missing Colab URL",
+      "Add a valid Ngrok or LocalTunnel Colab URL to your profile.",
+      400
+    );
+  }
+
+  const outKey = job.s3VideoKey || `jobs/${job.id}/final.mp4`;
+
+  // Get a presigned put URL so colab can upload the final MP4
+  const presignedPutUrl = await presignedPut({
+    bucket: bucketName,
+    key: outKey,
+    contentType: "video/mp4",
+    region,
+    expiresIn: 3600, // 1 hour is plenty for render
+  });
+
+  const response = await fetch(`${colabUrl.replace(/\/$/, '')}/render`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      jobId: job.id,
+      inputProps,
+      s3PutUrl: presignedPutUrl,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new AppError(
+      "colab_render_failed",
+      errorBody || `Colab API failed with status ${response.status}`,
+      "Failed to trigger Colab render engine. Is your Colab notebook running?",
+      502
+    );
+  }
+
+  return {
+    renderId: `colab-${job.id}-${Date.now()}`,
+    bucketName,
+    outKey,
+  };
 }
