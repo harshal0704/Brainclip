@@ -1,0 +1,1 @@
+ALTER TABLE "users" ALTER COLUMN "s3_region" SET DEFAULT 'us-east-1';

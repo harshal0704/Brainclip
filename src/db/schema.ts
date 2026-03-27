@@ -30,7 +30,7 @@ export const users = pgTable("users", {
   image: text("image"),
   passwordHash: text("password_hash"),
   s3Bucket: text("s3_bucket"),
-  s3Region: text("s3_region").default("ap-east-1").notNull(),
+  s3Region: text("s3_region").default("us-east-1").notNull(),
   colabUrl: text("colab_url"),
   colabHealthy: boolean("colab_healthy").default(false).notNull(),
   ttsProvider: text("tts_provider").default("fish").notNull(),
@@ -44,6 +44,8 @@ export const users = pgTable("users", {
   elevenLabsApiKey: text("eleven_labs_api_key"),
   elevenLabsVoiceA: text("eleven_labs_voice_a"),
   elevenLabsVoiceB: text("eleven_labs_voice_b"),
+  pollyVoiceA: text("polly_voice_a").default("Matthew"),
+  pollyVoiceB: text("polly_voice_b").default("Joanna"),
   llmApiKey: text("llm_api_key"),
   llmBaseUrl: text("llm_base_url"),
   llmModel: text("llm_model"),
@@ -73,6 +75,15 @@ export const jobs = pgTable("jobs", {
   lambdaRenderId: text("lambda_render_id"),
   lambdaBucket: text("lambda_bucket"),
   errorMessage: text("error_message"),
+  // New video mode fields
+  videoMode: text("video_mode").default("duo-debate"),
+  videoStyle: text("video_style").default("default"),
+  speakerLayout: text("speaker_layout").default("bottom-anchored"),
+  singleSpeakerConfig: jsonb("single_speaker_config").$type<Record<string, unknown>>().default({}),
+  introConfig: jsonb("intro_config").$type<Record<string, unknown>>().default({}),
+  outroConfig: jsonb("outro_config").$type<Record<string, unknown>>().default({}),
+  endCardConfig: jsonb("end_card_config").$type<Record<string, unknown>>().default({}),
+  overlays: jsonb("overlays").$type<Record<string, unknown>[]>().default([]).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -133,9 +144,12 @@ export const customVoices = pgTable("custom_voices", {
   // S3 keys for stored audio
   referenceAudioKey: text("reference_audio_key"),
   previewAudioKey: text("preview_audio_key"),
-  // Fish.audio model ID (after voice cloning)
+  // Fish.audio model ID (after voice cloning via API)
   fishModelId: text("fish_model_id"),
   fishCloneStatus: text("fish_clone_status"), // pending, processing, ready, failed
+  // Colab S2-Pro encoding (replaces Fish.audio for cloning)
+  colabRefText: text("colab_ref_text"), // reference text used for encoding
+  colabCloneStatus: text("colab_clone_status"), // pending, encoding, ready, failed
   // Audio metadata
   durationSec: real("duration_sec"),
   sampleRate: integer("sample_rate"),
