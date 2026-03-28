@@ -8,16 +8,7 @@ type SpeakerStickerProps = {
   activeLine: ScriptLine | null;
   isActive: boolean;
   editConfig: EditConfig;
-};
-
-const getShapeStyle = () => ({borderRadius: "50%"});
-
-const getIdlePosition = (speakerId: SpeakerId, width: number, height: number) => {
-  const centerX = width / 2 - 76;
-  return {
-    left: centerX,
-    top: speakerId === "A" ? 86 : height - 318,
-  };
+  subtitleYPercent: number;
 };
 
 const seededShake = (speakerId: SpeakerId, frame: number) => {
@@ -25,13 +16,26 @@ const seededShake = (speakerId: SpeakerId, frame: number) => {
   return Math.sin((frame + 1) * 7.7 * seed) * 5;
 };
 
-export const SpeakerSticker = ({speakerId, speaker, activeLine, isActive, editConfig}: SpeakerStickerProps) => {
+const getShapeStyle = () => ({borderRadius: "50%"});
+
+export const SpeakerSticker = ({
+  speakerId,
+  speaker,
+  activeLine,
+  isActive,
+  editConfig,
+  subtitleYPercent,
+}: SpeakerStickerProps) => {
   const frame = useCurrentFrame();
   const {fps, width, height} = useVideoConfig();
-  const position = getIdlePosition(speakerId, width, height);
+
+  const stickerSize = editConfig.stickerSize;
+  const stickerGap = editConfig.stickerGap;
+  const subtitleBottom = (subtitleYPercent / 100) * height;
 
   const startFrame = activeLine && activeLine.speaker === speakerId ? Math.floor(activeLine.startSec * fps) : null;
   const frameSinceSpeechStart = startFrame === null ? 0 : Math.max(0, frame - startFrame);
+
   const emphasis = spring({
     frame: frameSinceSpeechStart,
     fps,
@@ -48,7 +52,7 @@ export const SpeakerSticker = ({speakerId, speaker, activeLine, isActive, editCo
         extrapolateLeft: "clamp",
         extrapolateRight: "clamp",
       })
-    : 0.16;
+    : 0;
 
   let translateX = 0;
   let translateY = 0;
@@ -76,9 +80,11 @@ export const SpeakerSticker = ({speakerId, speaker, activeLine, isActive, editCo
       break;
     case "spin":
       scale = isActive ? 1.1 : 0.94;
-      rotation = isActive ? interpolate(frameSinceSpeechStart, [0, 30], [0, 360], {
-        extrapolateRight: "clamp"
-      }) : 0;
+      rotation = isActive
+        ? interpolate(frameSinceSpeechStart, [0, 30], [0, 360], {
+            extrapolateRight: "clamp",
+          })
+        : 0;
       translateX = 0;
       break;
     case "shake":
@@ -92,76 +98,94 @@ export const SpeakerSticker = ({speakerId, speaker, activeLine, isActive, editCo
       break;
   }
 
+  if (!speaker.stickerEnabled || !speaker.stickerUrl) {
+    return null;
+  }
+
+  const bottomOffset = subtitleBottom + stickerGap + 60;
+  const position = {
+    left: width / 2 - stickerSize / 2,
+    bottom: bottomOffset,
+  };
+
+  const entryProgress = spring({
+    frame: frameSinceSpeechStart,
+    fps,
+    config: {damping: 16, stiffness: 140},
+    durationInFrames: 20,
+  });
+  const entryOpacity = isActive ? interpolate(entryProgress, [0, 1], [0, 1]) : interpolate(frameSinceSpeechStart, [0, 15], [1, 0]);
+  const entryScale = isActive ? interpolate(entryProgress, [0, 1], [0.5, 1]) : interpolate(frameSinceSpeechStart, [0, 15], [1, 0.8]);
+
+  if (entryOpacity <= 0.01) {
+    return null;
+  }
+
   return (
-    <div style={{position: "absolute", left: position.left, top: position.top, width: 152, pointerEvents: "none"}}>
+    <div
+      style={{
+        position: "absolute",
+        left: position.left + editConfig.stickerOffsetX,
+        bottom: position.bottom + editConfig.stickerOffsetY,
+        width: stickerSize,
+        pointerEvents: "none",
+        opacity: entryOpacity,
+        transform: `scale(${entryScale * scale})`,
+      }}
+    >
       <div
         style={{
           position: "relative",
-          width: 152,
-          height: 152,
-          transform: `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotation}deg)`,
+          width: stickerSize,
+          height: stickerSize,
+          transform: `translate(${translateX}px, ${translateY}px) rotate(${rotation}deg)`,
         }}
       >
         <div
           style={{
             position: "absolute",
-            inset: -12,
+            inset: -12 * (stickerSize / 152),
             borderRadius: "50%",
-            border: `4px solid ${speaker.color}`,
+            border: `${editConfig.stickerBorderWidth}px solid ${speaker.color}`,
             boxShadow: `0 0 28px ${speaker.color}, inset 0 0 24px ${speaker.color}`,
             opacity: glowOpacity,
           }}
         />
         <div
           style={{
-            width: 152,
-            height: 152,
+            width: stickerSize,
+            height: stickerSize,
             overflow: "hidden",
-            border: `4px solid ${speaker.color}`,
+            border: `${editConfig.stickerBorderWidth}px solid ${speaker.color}`,
             background: `linear-gradient(135deg, ${speaker.color} 0%, rgba(255,255,255,0.15) 100%)`,
             boxShadow: "0 18px 40px rgba(0,0,0,0.35)",
             ...getShapeStyle(),
           }}
         >
-          {speaker.stickerUrl ? (
-            <Img src={speaker.stickerUrl} style={{width: "100%", height: "100%", objectFit: "cover"}} />
-          ) : (
-            <div
-              style={{
-                width: "100%",
-                height: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "white",
-                fontSize: 56,
-                fontWeight: 900,
-              }}
-            >
-              {speaker.label.slice(0, 1).toUpperCase()}
-            </div>
-          )}
+          <Img src={speaker.stickerUrl} style={{width: "100%", height: "100%", objectFit: "cover"}} />
         </div>
       </div>
 
-      <div
-        style={{
-          marginTop: 16,
-          padding: "10px 18px",
-          borderRadius: 999,
-          backgroundColor: "rgba(6, 10, 14, 0.78)",
-          border: `1px solid ${speaker.color}`,
-          boxShadow: isActive ? `0 0 24px ${speaker.color}` : "0 10px 24px rgba(0,0,0,0.28)",
-          color: "white",
-          fontSize: 24,
-          fontWeight: 800,
-          textAlign: "center",
-          opacity: isActive ? interpolate(nameTagReveal, [0, 1], [0.45, 1]) : 0.72,
-          transform: `translateY(${isActive ? interpolate(nameTagReveal, [0, 1], [18, 0]) : 0}px)`,
-        }}
-      >
-        {speaker.label}
-      </div>
+      {editConfig.showStickerLabels && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: "10px 18px",
+            borderRadius: 999,
+            backgroundColor: "rgba(6, 10, 14, 0.78)",
+            border: `1px solid ${speaker.color}`,
+            boxShadow: isActive ? `0 0 24px ${speaker.color}` : "0 10px 24px rgba(0,0,0,0.28)",
+            color: "white",
+            fontSize: Math.max(14, Math.round(stickerSize * 0.16)),
+            fontWeight: 800,
+            textAlign: "center",
+            opacity: interpolate(nameTagReveal, [0, 1], [0.45, 1]),
+            transform: `translateY(${interpolate(nameTagReveal, [0, 1], [18, 0])}px)`,
+          }}
+        >
+          {speaker.label}
+        </div>
+      )}
     </div>
   );
 };

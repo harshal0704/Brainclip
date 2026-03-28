@@ -1,7 +1,10 @@
 import {Composition, registerRoot} from "remotion";
 
 import {ReelComposition} from "./ReelComposition";
-import {reelCompositionSchema, defaultEditConfig, mergeEditConfig, type ReelCompositionProps} from "./types";
+import {SingleHostComposition} from "./compositions/SingleHostComposition";
+import {DuoInterviewComposition} from "./compositions/DuoInterviewComposition";
+import {SideBySideComposition} from "./compositions/SideBySideComposition";
+import {reelCompositionSchema, defaultEditConfig, mergeEditConfig, getSubtitleYFromPosition, type ReelCompositionProps, videoModeSchema} from "./types";
 
 const getDurationInFrames = (props: ReelCompositionProps) => {
   const lastWord = props.wordTimings.reduce((max, word) => Math.max(max, word.end), 0);
@@ -30,32 +33,93 @@ const defaultProps: ReelCompositionProps = {
     {id: "line-1", speaker: "A", text: "This reel switches between two speakers.", startSec: 0, endSec: 2.18},
     {id: "line-2", speaker: "B", text: "Every word lands on the beat.", startSec: 2.4, endSec: 4.12},
   ],
-  speakerA: {label: "Speaker A", stickerUrl: "", color: "#61d6ff"},
-  speakerB: {label: "Speaker B", stickerUrl: "", color: "#ffb259"},
+  speakerA: {label: "Speaker A", stickerUrl: "", color: "#61d6ff", stickerEnabled: false},
+  speakerB: {label: "Speaker B", stickerUrl: "", color: "#ffb259", stickerEnabled: false},
   subtitleStyle: "pop-highlight",
   editConfig: mergeEditConfig({
     stickerAnim: "bounce",
     subtitleSize: 48,
-    subtitleY: 66,
+    subtitleY: 75,
     bgDimOpacity: 0.34,
   }),
+  videoMode: "duo-debate",
+  videoStyle: "default",
+  speakerLayout: "bottom-anchored",
+  overlays: [],
+};
+
+const getCompositionComponent = (videoMode: string) => {
+  switch (videoMode) {
+    case "single-host":
+    case "single-presenter":
+      return SingleHostComposition;
+    case "duo-interview":
+      return DuoInterviewComposition;
+    case "duo-side-by-side":
+    case "duo-split-screen":
+      return SideBySideComposition;
+    case "duo-debate":
+    default:
+      return ReelComposition;
+  }
 };
 
 export const RemotionRoot = () => {
   return (
-    <Composition
-      id="ReelComposition"
-      component={ReelComposition}
-      width={720}
-      height={1280}
-      fps={30}
-      durationInFrames={getDurationInFrames(defaultProps)}
-      schema={reelCompositionSchema}
-      defaultProps={defaultProps}
-      calculateMetadata={({props}: {props: ReelCompositionProps}) => ({
-        durationInFrames: getDurationInFrames(props),
-      })}
-    />
+    <>
+      <Composition
+        id="ReelComposition"
+        component={ReelComposition}
+        width={720}
+        height={1280}
+        fps={30}
+        durationInFrames={getDurationInFrames(defaultProps)}
+        schema={reelCompositionSchema}
+        defaultProps={defaultProps}
+        calculateMetadata={({props}: {props: ReelCompositionProps}) => ({
+          durationInFrames: getDurationInFrames(props),
+        })}
+      />
+      <Composition
+        id="SingleHostComposition"
+        component={SingleHostComposition}
+        width={720}
+        height={1280}
+        fps={30}
+        durationInFrames={getDurationInFrames(defaultProps)}
+        schema={reelCompositionSchema}
+        defaultProps={defaultProps}
+        calculateMetadata={({props}: {props: ReelCompositionProps}) => ({
+          durationInFrames: getDurationInFrames(props),
+        })}
+      />
+      <Composition
+        id="DuoInterviewComposition"
+        component={DuoInterviewComposition}
+        width={720}
+        height={1280}
+        fps={30}
+        durationInFrames={getDurationInFrames(defaultProps)}
+        schema={reelCompositionSchema}
+        defaultProps={defaultProps}
+        calculateMetadata={({props}: {props: ReelCompositionProps}) => ({
+          durationInFrames: getDurationInFrames(props),
+        })}
+      />
+      <Composition
+        id="SideBySideComposition"
+        component={SideBySideComposition}
+        width={720}
+        height={1280}
+        fps={30}
+        durationInFrames={getDurationInFrames(defaultProps)}
+        schema={reelCompositionSchema}
+        defaultProps={defaultProps}
+        calculateMetadata={({props}: {props: ReelCompositionProps}) => ({
+          durationInFrames: getDurationInFrames(props),
+        })}
+      />
+    </>
   );
 };
 
