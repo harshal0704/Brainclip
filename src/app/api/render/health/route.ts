@@ -3,9 +3,32 @@ import {NextResponse} from "next/server";
 import {AppError, toErrorResponse} from "@/lib/errors";
 import {getLambdaFunctions} from "@/lib/render";
 
-export async function GET() {
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: Request) {
   try {
+    const url = new URL(request.url);
+    const provider = url.searchParams.get("provider") || "lambda";
+
     const functionName = process.env.REMOTION_FUNCTION_NAME;
+    const githubToken = process.env.GITHUB_TOKEN;
+
+    if (provider === "github") {
+      if (!githubToken) {
+        throw new AppError(
+          "github_not_configured",
+          "GITHUB_TOKEN is not configured",
+          "GitHub Actions render requires GITHUB_TOKEN to be configured in environment.",
+          500,
+        );
+      }
+
+      return NextResponse.json({
+        ok: true,
+        provider: "github",
+        note: "GitHub Actions render is configured and ready.",
+      });
+    }
 
     if (!functionName) {
       throw new AppError(

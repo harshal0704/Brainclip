@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { AppError, toErrorResponse } from "@/lib/errors";
 import { buildJobPresignedOutputs, normalizeCreateJobInput } from "@/lib/jobs";
 import { requireUserFromRequest } from "@/lib/session";
-import { dispatchColabVoiceJob, dispatchElevenLabsVoiceJob, dispatchFishApiVoiceJob, dispatchHuggingFaceVoiceJob } from "@/lib/voice";
+import { dispatchColabVoiceJob, dispatchElevenLabsVoiceJob, dispatchFishApiVoiceJob, dispatchHuggingFaceVoiceJob, dispatchPollyVoiceJob, resolvePresetRefUrl } from "@/lib/voice";
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,6 +59,25 @@ export async function POST(request: NextRequest) {
 
     try {
       if (voiceMode === "colab") {
+        const speakerAMap = body.voiceMap.speakerA as { modelId?: string } | undefined;
+        const speakerBMap = body.voiceMap.speakerB as { modelId?: string } | undefined;
+        const speakerAModelId = speakerAMap?.modelId;
+        const speakerBModelId = speakerBMap?.modelId;
+
+        const [refAudioUrlA, refAudioUrlB] = await Promise.all([
+          speakerAModelId ? resolvePresetRefUrl(speakerAModelId, user.id) : null,
+          speakerBModelId ? resolvePresetRefUrl(speakerBModelId, user.id) : null,
+        ]);
+
+        const speakerAConfig = {
+          ...speakerAMap,
+          refAudioUrl: refAudioUrlA ?? undefined,
+        };
+        const speakerBConfig = {
+          ...speakerBMap,
+          refAudioUrl: refAudioUrlB ?? undefined,
+        };
+
         await dispatchColabVoiceJob(
           {
             jobId,
@@ -67,8 +86,8 @@ export async function POST(request: NextRequest) {
             region: user.s3Region,
             colabUrl: user.colabUrl ?? undefined,
             lines: body.scriptLines,
-            speakerA: body.voiceMap.speakerA as Parameters<typeof dispatchColabVoiceJob>[0]["speakerA"],
-            speakerB: body.voiceMap.speakerB as Parameters<typeof dispatchColabVoiceJob>[0]["speakerB"],
+            speakerA: speakerAConfig as Parameters<typeof dispatchColabVoiceJob>[0]["speakerA"],
+            speakerB: speakerBConfig as Parameters<typeof dispatchColabVoiceJob>[0]["speakerB"],
             presignedUrls: {
               lines: presigned.urls.audioFiles,
               master: presigned.urls.masterAudio,
@@ -191,6 +210,52 @@ export async function POST(request: NextRequest) {
             .returning();
 
           nextJob = updatedJob;
+        } else if (user.ttsProvider === "polly") {
+          await db
+            .update(jobs)
+            .set({
+              status: "voice_processing",
+              stage: "Generating voice assets with Amazon Polly",
+              progressPct: 12,
+              updatedAt: new Date(),
+            })
+            .where(eq(jobs.id, jobId));
+
+          await dispatchPollyVoiceJob(
+            {
+              jobId,
+              userId: user.id,
+              bucket: user.s3Bucket,
+              region: user.s3Region,
+              lines: body.scriptLines,
+              speakerA: body.voiceMap.speakerA as Parameters<typeof dispatchPollyVoiceJob>[0]["speakerA"],
+              speakerB: body.voiceMap.speakerB as Parameters<typeof dispatchPollyVoiceJob>[0]["speakerB"],
+              presignedUrls: {
+                lines: presigned.urls.audioFiles,
+                master: presigned.urls.masterAudio,
+                transcript: presigned.urls.transcriptJson,
+              },
+            },
+            {
+              voiceIdA: user.pollyVoiceA ?? undefined,
+              voiceIdB: user.pollyVoiceB ?? undefined,
+              region: user.s3Region,
+            },
+          );
+
+          const [updatedJob] = await db
+            .update(jobs)
+            .set({
+              status: "voice_done",
+              stage: "Voice assets ready",
+              progressPct: 60,
+              errorMessage: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(jobs.id, jobId))
+            .returning();
+
+          nextJob = updatedJob;
         } else {
           const fishApiKey = decryptSecret(user.fishApiKey);
 
@@ -242,6 +307,66 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (error) {
+      // Auto-fallback: if primary provider failed and AWS creds exist, try Polly
+      const hasAwsCreds = !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+      const notPollyAlready = voiceMode !== "polly" && user.ttsProvider !== "polly";
+
+      if (hasAwsCreds && notPollyAlready) {
+        try {
+          await db
+            .update(jobs)
+            .set({
+              status: "voice_processing",
+              stage: "Fallback: Generating voice assets with Amazon Polly",
+              progressPct: 12,
+              updatedAt: new Date(),
+            })
+            .where(eq(jobs.id, jobId));
+
+          await dispatchPollyVoiceJob(
+            {
+              jobId,
+              userId: user.id,
+              bucket: user.s3Bucket,
+              region: user.s3Region,
+              lines: body.scriptLines,
+              speakerA: body.voiceMap.speakerA as Parameters<typeof dispatchPollyVoiceJob>[0]["speakerA"],
+              speakerB: body.voiceMap.speakerB as Parameters<typeof dispatchPollyVoiceJob>[0]["speakerB"],
+              presignedUrls: {
+                lines: presigned.urls.audioFiles,
+                master: presigned.urls.masterAudio,
+                transcript: presigned.urls.transcriptJson,
+              },
+            },
+            {
+              voiceIdA: user.pollyVoiceA ?? undefined,
+              voiceIdB: user.pollyVoiceB ?? undefined,
+              region: user.s3Region,
+            },
+          );
+
+          const [updatedJob] = await db
+            .update(jobs)
+            .set({
+              status: "voice_done",
+              stage: "Voice assets ready (Polly fallback)",
+              progressPct: 60,
+              errorMessage: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(jobs.id, jobId))
+            .returning();
+
+          nextJob = updatedJob;
+          return NextResponse.json({
+            job: nextJob,
+            presignedUrls: presigned.urls,
+          });
+        } catch {
+          // Polly fallback also failed — fall through to normal error handling
+        }
+      }
+
       const errorMessage = error instanceof AppError ? error.userMessage : "Voice dispatch failed. Review your routing settings and try again.";
 
       await db
@@ -275,6 +400,48 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       jobs: userJobs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 20),
     });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const user = await requireUserFromRequest(request);
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get("action");
+
+    if (action === "cleanup-old") {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const oldJobs = await db
+        .select({ id: jobs.id, createdAt: jobs.createdAt })
+        .from(jobs)
+        .where(eq(jobs.userId, user.id));
+
+      const deletableJobs = oldJobs.filter(job => {
+        const jobDate = job.createdAt ? new Date(job.createdAt) : null;
+        return jobDate && jobDate < thirtyDaysAgo;
+      });
+
+      if (deletableJobs.length === 0) {
+        return NextResponse.json({ message: "No old jobs to delete", deletedCount: 0 });
+      }
+
+      const idsToDelete = deletableJobs.map(j => j.id);
+
+      await db
+        .delete(jobs)
+        .where(eq(jobs.userId, user.id));
+
+      return NextResponse.json({
+        message: `Deleted ${idsToDelete.length} old jobs`,
+        deletedCount: idsToDelete.length,
+      });
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
     return toErrorResponse(error);
   }

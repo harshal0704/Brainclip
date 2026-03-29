@@ -30,49 +30,29 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   try {
     const user = await requireUserFromRequest(request);
     const body = await request.json();
-
-    const {
-      topic,
-      duoId,
-      speakerAPersona,
-      speakerBPersona,
-      voiceMode,
-      subtitleStyle,
-      stickerAnim,
-      stickerUrlA,
-      stickerUrlB,
-      backgroundUrl,
-      bgDimOpacity,
-      showProgressBar,
-      assetPackId,
-      resolution,
-      ctaText,
-      scriptLines,
-      fishModelA,
-      fishModelB,
-    } = body;
+    const { formState, scriptLines } = body;
 
     const [updatedDraft] = await db
       .update(drafts)
       .set({
-        ...(topic && { topic }),
-        ...(duoId && { duoId }),
-        ...(speakerAPersona && { speakerAPersona }),
-        ...(speakerBPersona && { speakerBPersona }),
-        ...(voiceMode && { voiceMode }),
-        ...(subtitleStyle && { subtitleStyle }),
-        ...(stickerAnim && { stickerAnim }),
-        ...(stickerUrlA && { stickerUrlA }),
-        ...(stickerUrlB && { stickerUrlB }),
-        ...(backgroundUrl !== undefined && { backgroundUrl }),
-        ...(bgDimOpacity !== undefined && { bgDimOpacity }),
-        ...(showProgressBar !== undefined && { showProgressBar }),
-        ...(assetPackId && { assetPackId }),
-        ...(resolution && { resolution }),
-        ...(ctaText !== undefined && { ctaText }),
-        ...(scriptLines && { scriptLines }),
-        ...(fishModelA && { fishModelA }),
-        ...(fishModelB && { fishModelB }),
+        topic: formState?.topic || "Untitled Draft",
+        duoId: formState?.duoId,
+        speakerAPersona: formState?.speakerAPersona,
+        speakerBPersona: formState?.speakerBPersona,
+        voiceMode: formState?.voiceMode,
+        subtitleStyle: formState?.subtitleStyle,
+        stickerAnim: formState?.stickerAnim,
+        stickerUrlA: formState?.stickerUrlA,
+        stickerUrlB: formState?.stickerUrlB,
+        backgroundUrl: formState?.backgroundUrl,
+        bgDimOpacity: formState?.bgDimOpacity,
+        showProgressBar: formState?.showProgressBar,
+        assetPackId: formState?.assetPackId,
+        resolution: formState?.resolution,
+        ctaText: formState?.ctaText,
+        fishModelA: formState?.fishModelA,
+        fishModelB: formState?.fishModelB,
+        scriptLines,
         updatedAt: new Date(),
       })
       .where(and(eq(drafts.id, params.id), eq(drafts.userId, user.id)))

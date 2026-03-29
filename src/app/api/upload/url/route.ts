@@ -21,13 +21,13 @@ export async function POST(request: NextRequest) {
       bucket: user.s3Bucket,
       key,
       contentType,
-      region: user.s3Region || "ap-east-1",
+      region: user.s3Region || "us-east-1",
     });
 
     const publicUrl = await presignedGet({
       bucket: user.s3Bucket,
       key,
-      region: user.s3Region || "ap-east-1",
+      region: user.s3Region || "us-east-1",
       expiresIn: 7 * 24 * 60 * 60,
     });
 

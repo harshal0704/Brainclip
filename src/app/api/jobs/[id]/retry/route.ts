@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { AppError, toErrorResponse } from "@/lib/errors";
 import { buildJobPresignedOutputs } from "@/lib/jobs";
 import { requireUserFromRequest } from "@/lib/session";
-import { dispatchColabVoiceJob, dispatchElevenLabsVoiceJob, dispatchFishApiVoiceJob, dispatchHuggingFaceVoiceJob } from "@/lib/voice";
+import { dispatchColabVoiceJob, dispatchElevenLabsVoiceJob, dispatchFishApiVoiceJob, dispatchHuggingFaceVoiceJob, dispatchPollyVoiceJob, resolvePresetRefUrl } from "@/lib/voice";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -123,6 +123,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
       try {
         if (voiceMode === "colab") {
+          const speakerAMap = voiceMap.speakerA as { modelId?: string } | undefined;
+          const speakerBMap = voiceMap.speakerB as { modelId?: string } | undefined;
+          const speakerAModelId = speakerAMap?.modelId;
+          const speakerBModelId = speakerBMap?.modelId;
+
+          const [refAudioUrlA, refAudioUrlB] = await Promise.all([
+            speakerAModelId ? resolvePresetRefUrl(speakerAModelId, user.id) : null,
+            speakerBModelId ? resolvePresetRefUrl(speakerBModelId, user.id) : null,
+          ]);
+
+          const speakerAConfig = {
+            ...speakerAMap,
+            refAudioUrl: refAudioUrlA ?? undefined,
+          };
+          const speakerBConfig = {
+            ...speakerBMap,
+            refAudioUrl: refAudioUrlB ?? undefined,
+          };
+
           await dispatchColabVoiceJob(
             {
               jobId: id,
@@ -139,8 +158,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
                 chunk_length: line.chunk_length ?? 200,
                 normalize: line.normalize ?? true,
               })),
-              speakerA: voiceMap.speakerA as Parameters<typeof dispatchColabVoiceJob>[0]["speakerA"],
-              speakerB: voiceMap.speakerB as Parameters<typeof dispatchColabVoiceJob>[0]["speakerB"],
+              speakerA: speakerAConfig as Parameters<typeof dispatchColabVoiceJob>[0]["speakerA"],
+              speakerB: speakerBConfig as Parameters<typeof dispatchColabVoiceJob>[0]["speakerB"],
               presignedUrls: {
                 lines: presigned.urls.audioFiles,
                 master: presigned.urls.masterAudio,
@@ -268,6 +287,57 @@ export async function POST(request: NextRequest, context: RouteContext) {
                 },
               },
               elevenLabsApiKey,
+            );
+
+            await db
+              .update(jobs)
+              .set({
+                status: "voice_done",
+                stage: "Voice assets regenerated successfully",
+                progressPct: 60,
+                errorMessage: null,
+                updatedAt: new Date(),
+              })
+              .where(eq(jobs.id, id));
+          } else if (user.ttsProvider === "polly") {
+            await db
+              .update(jobs)
+              .set({
+                status: "voice_processing",
+                stage: "Retrying voice generation with Amazon Polly",
+                progressPct: 12,
+                updatedAt: new Date(),
+              })
+              .where(eq(jobs.id, id));
+
+            await dispatchPollyVoiceJob(
+              {
+                jobId: id,
+                userId: user.id,
+                bucket: user.s3Bucket,
+                region: user.s3Region,
+                lines: scriptLines.map((line) => ({
+                  ...line,
+                  emotion: line.emotion ?? "neutral",
+                  speaking_rate: line.speaking_rate ?? 1,
+                  pause_ms: line.pause_ms ?? 250,
+                  temperature: line.temperature ?? 0.7,
+                  chunk_length: line.chunk_length ?? 200,
+                  normalize: line.normalize ?? true,
+                })),
+                speakerA: voiceMap.speakerA as Parameters<typeof dispatchPollyVoiceJob>[0]["speakerA"],
+                speakerB: voiceMap.speakerB as Parameters<typeof dispatchPollyVoiceJob>[0]["speakerB"],
+                presignedUrls: {
+                  lines: presigned.urls.audioFiles,
+                  master: presigned.urls.masterAudio,
+                  transcript: presigned.urls.transcriptJson,
+                },
+              },
+              {
+                voiceIdA: user.pollyVoiceA ?? undefined,
+                voiceIdB: user.pollyVoiceB ?? undefined,
+                region: user.s3Region,
+              },
             );
 
             await db

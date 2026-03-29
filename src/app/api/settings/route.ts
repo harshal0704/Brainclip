@@ -13,8 +13,8 @@ const settingsSchema = z.object({
   llmBaseUrl: z.string().url().optional().or(z.literal("")),
   llmModel: z.string().optional().or(z.literal("")),
   llmApiKey: z.string().optional(),
-  ttsProvider: z.enum(["fish", "huggingface", "elevenlabs"]).optional(),
-  renderProvider: z.enum(["lambda", "colab"]).optional(),
+  ttsProvider: z.enum(["fish", "huggingface", "elevenlabs", "polly"]).optional(),
+  renderProvider: z.enum(["lambda", "colab", "github"]).optional(),
   fishModelA: z.string().optional(),
   fishModelB: z.string().optional(),
   fishApiKey: z.string().optional(),
@@ -24,6 +24,8 @@ const settingsSchema = z.object({
   elevenLabsVoiceA: z.string().optional(),
   elevenLabsVoiceB: z.string().optional(),
   elevenLabsApiKey: z.string().optional(),
+  pollyVoiceA: z.string().optional(),
+  pollyVoiceB: z.string().optional(),
   colabUrl: z.string().url().optional().or(z.literal("")),
 });
 
@@ -34,7 +36,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       settings: {
         llmBaseUrl: user.llmBaseUrl ?? "https://generativelanguage.googleapis.com/v1beta",
-        llmModel: user.llmModel ?? "gemini-1.5-flash",
+        llmModel: user.llmModel ?? "gemini-flash-lite-latest",
         ttsProvider: user.ttsProvider ?? "fish",
         renderProvider: user.renderProvider ?? "lambda",
         fishModelA: user.fishModelA ?? "",
@@ -43,6 +45,8 @@ export async function GET(request: NextRequest) {
         hfModelB: user.hfModelB ?? "",
         elevenLabsVoiceA: user.elevenLabsVoiceA ?? "",
         elevenLabsVoiceB: user.elevenLabsVoiceB ?? "",
+        pollyVoiceA: user.pollyVoiceA ?? "Matthew",
+        pollyVoiceB: user.pollyVoiceB ?? "Joanna",
         colabUrl: user.colabUrl ?? "",
         hasLlmApiKey: Boolean(decryptSecret(user.llmApiKey)),
         hasFishApiKey: Boolean(decryptSecret(user.fishApiKey)),
@@ -84,6 +88,8 @@ export async function PATCH(request: NextRequest) {
         elevenLabsVoiceA: body.elevenLabsVoiceA?.trim() ? body.elevenLabsVoiceA : null,
         elevenLabsVoiceB: body.elevenLabsVoiceB?.trim() ? body.elevenLabsVoiceB : null,
         elevenLabsApiKey: body.elevenLabsApiKey?.trim() ? encryptSecret(body.elevenLabsApiKey.trim()) : user.elevenLabsApiKey,
+        pollyVoiceA: body.pollyVoiceA?.trim() ? body.pollyVoiceA : (user.pollyVoiceA ?? "Matthew"),
+        pollyVoiceB: body.pollyVoiceB?.trim() ? body.pollyVoiceB : (user.pollyVoiceB ?? "Joanna"),
         colabUrl: body.colabUrl?.trim() ? body.colabUrl : null,
         updatedAt: new Date(),
       })
@@ -102,6 +108,8 @@ export async function PATCH(request: NextRequest) {
         hfModelB: updatedUser.hfModelB ?? "",
         elevenLabsVoiceA: updatedUser.elevenLabsVoiceA ?? "",
         elevenLabsVoiceB: updatedUser.elevenLabsVoiceB ?? "",
+        pollyVoiceA: updatedUser.pollyVoiceA ?? "Matthew",
+        pollyVoiceB: updatedUser.pollyVoiceB ?? "Joanna",
         colabUrl: updatedUser.colabUrl ?? "",
         hasLlmApiKey: Boolean(updatedUser.llmApiKey),
         hasFishApiKey: Boolean(updatedUser.fishApiKey),

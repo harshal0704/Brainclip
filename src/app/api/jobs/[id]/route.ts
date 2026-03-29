@@ -6,9 +6,36 @@ import { jobs } from "@/db/schema";
 import { db } from "@/lib/db";
 import { AppError, toErrorResponse } from "@/lib/errors";
 import { buildRenderInputProps, getSpeakerConfigsFromVoiceMap } from "@/lib/jobs";
-import { getLambdaRenderProgress, getRenderFailureMessage, triggerLambdaRender, triggerColabRender } from "@/lib/render";
+import { getLambdaRenderProgress, getRenderFailureMessage, triggerLambdaRender, triggerGithubRender, triggerColabRender } from "@/lib/render";
 import { copyObject, headObject } from "@/lib/s3";
 import { requireOwnedJob } from "@/lib/session";
+
+const getProgressWithRetry = async (
+  renderId: string,
+  bucketName: string,
+  maxRetries = 3
+) => {
+  let lastError: unknown;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await getLambdaRenderProgress({
+        renderId,
+        bucketName,
+      });
+    } catch (error) {
+      lastError = error;
+      console.error(`[Render Progress] Attempt ${attempt}/${maxRetries} failed:`, error instanceof Error ? error.message : String(error));
+      
+      if (attempt < maxRetries) {
+        const delay = Math.min(1000 * attempt, 3000);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError;
+};
 
 const pollColabStatus = async (colabUrl: string, jobId: string) => {
   const response = await fetch(new URL(`/voice/job/${jobId}`, colabUrl));
@@ -213,6 +240,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       });
 
       try {
+        const hasGithubToken = !!process.env.GITHUB_TOKEN;
         let renderId = "";
         let bucketName = "";
         let stage = "Rendering video";
@@ -222,6 +250,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           renderId = render.renderId;
           bucketName = render.bucketName;
           stage = "Rendering video on Colab server";
+        } else if (user.renderProvider === "github" && user.s3Bucket && hasGithubToken) {
+          const render = await triggerGithubRender(nextJob, inputProps, user.s3Bucket, user.s3Region || "us-east-1");
+          renderId = render.renderId;
+          bucketName = render.bucketName;
+          stage = "Rendering video with GitHub Actions";
         } else {
           const render = await triggerLambdaRender(nextJob, inputProps);
           renderId = render.renderId;
@@ -255,9 +288,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     if (nextJob.status === "rendering" && nextJob.lambdaRenderId && nextJob.lambdaBucket) {
       try {
+        const isGithub = nextJob.lambdaRenderId.startsWith("github-");
         const isColab = nextJob.lambdaRenderId.startsWith("colab-");
 
-        if (isColab && user.s3Bucket && nextJob.s3VideoKey) {
+        if ((isGithub || isColab) && user.s3Bucket && nextJob.s3VideoKey) {
           const isDone = await hasObject(user.s3Bucket, nextJob.s3VideoKey, user.s3Region);
           
           if (isDone) {
@@ -288,10 +322,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             }
           }
         } else {
-          const progress = await getLambdaRenderProgress({
-            renderId: nextJob.lambdaRenderId,
-            bucketName: nextJob.lambdaBucket,
-          });
+          const progress = await getProgressWithRetry(
+            nextJob.lambdaRenderId,
+            nextJob.lambdaBucket
+          );
 
           if (progress.fatalErrorEncountered) {
             return failJob({
@@ -302,31 +336,37 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             });
           }
 
+          let copyError: string | null = null;
           if (progress.done && progress.outKey && progress.outBucket && user.s3Bucket && nextJob.s3VideoKey) {
-            await copyObject({
-              sourceBucket: progress.outBucket,
-              sourceKey: progress.outKey,
-              destinationBucket: user.s3Bucket,
-              destinationKey: nextJob.s3VideoKey,
-              region: user.s3Region,
-              contentType: "video/mp4",
-            });
+            try {
+              await copyObject({
+                sourceBucket: progress.outBucket,
+                sourceKey: progress.outKey,
+                destinationBucket: user.s3Bucket,
+                destinationKey: nextJob.s3VideoKey,
+                region: user.s3Region,
+                contentType: "video/mp4",
+              });
+            } catch (copyErr) {
+              console.error("[S3 Copy] Failed to copy video to user bucket:", copyErr instanceof Error ? copyErr.message : String(copyErr));
+              copyError = copyErr instanceof Error ? copyErr.message : "Failed to copy video to user bucket";
+            }
           }
 
           const renderProgressPct = Math.max(70, Math.round(progress.overallProgress * 100));
           const stage = progress.done
-            ? "Render complete"
+            ? (copyError ? "Render complete but copy failed" : "Render complete")
             : `Rendering video with Remotion Lambda (${renderProgressPct}%)`;
 
           const [updatedJob] = await db
             .update(jobs)
             .set({
-              status: progress.done ? "done" : "rendering",
+              status: progress.done && !copyError ? "done" : "rendering",
               stage,
               progressPct: progress.done ? 100 : renderProgressPct,
               s3VideoKey: nextJob.s3VideoKey ?? progress.outKey,
               lambdaBucket: progress.outBucket ?? nextJob.lambdaBucket,
-              errorMessage: null,
+              errorMessage: copyError,
               updatedAt: new Date(),
             })
             .where(eq(jobs.id, nextJob.id))
