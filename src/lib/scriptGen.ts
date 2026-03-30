@@ -12,6 +12,7 @@ export const scriptRequestSchema = z.object({
   language: z.string().min(1).default("en"),
   tempA: z.number().min(0).max(2).default(0.7),
   tempB: z.number().min(0).max(2).default(0.7),
+  videoDuration: z.enum(["short", "medium", "long"]).default("medium"),
 });
 
 export const generatedScriptLineSchema = z.object({
@@ -47,23 +48,23 @@ Generate a captivating, natural conversation between Speaker A and Speaker B on 
 Output ONLY a valid JSON array of ScriptLine objects. No markdown, no code fences, no preamble, no explanation.
 
 Each object in the array must include EXACTLY these fields:
-- id: line_001 through line_020
+- id: line_001 through line_040
 - speaker: A or B
-- text: natural spoken line, 5-20 words. Use contractions, slang if appropriate, filler words (like "Wait,", "Actually,"), and cut out fluff.
+- text: natural spoken line, 5-15 words. Use contractions, slang if appropriate, filler words (like "Wait,", "Actually,"), and cut out fluff.
 - emotion: one of neutral, happy, sad, angry, surprised, excited, whispering, shouting
 - speaking_rate: float 0.75-1.25
-- pause_ms: integer 150-800
+- pause_ms: integer 150-600
 - temperature: use the speaker default temperature provided by the user message
 - chunk_length: always 200
 - normalize: always true
 
 Writing rules:
-1. Total lines: 12-18 lines for a punchy ~45 second video.
+1. Total lines: 25-35 lines for a 60-180 second video. Each line should be 5-15 words. Include pauses between lines (150-600ms).
 2. Alternate clearly. Interruptions and quick back-and-forths are encouraged.
 3. Line 1 MUST be a massive hook: an unbelievable fact, a provocative question, or a strong hook statement. It must grab attention instantly.
-4. Pacing: Lines 1-4 should be very fast-paced (speaking rate 1.1 - 1.2, short pauses) to build momentum.
-5. Middle section: Introduce a turning point or conflict. Make the audience question what they know.
-6. The ending: Subvert expectations or drop a major realization. Last 2 lines should slow down dramatically (0.82-0.88, longer pauses) for impact. End on a cliffhanger, a call-to-action, or a thought-provoking final statement.
+4. Pacing: Lines 1-5 should be very fast-paced (speaking rate 1.1 - 1.2, short pauses) to build momentum.
+5. Middle section: Introduce a turning point or conflict. Make the audience question what they know. Add variety in pacing - some fast exchanges, some slower explanations.
+6. The ending: Subvert expectations or drop a major realization. Last 3-4 lines should slow down dramatically (0.82-0.88, longer pauses) for impact. End on a cliffhanger, a call-to-action, or a thought-provoking final statement.
 7. Tone: conversational, high-energy, NEVER academic. Write like two friends arguing or sharing a mind-blowing secret.
 8. Never include profanity, copyrighted quotes, or medical/legal advice.
 9. Return ONLY the raw JSON array.`;
@@ -160,7 +161,7 @@ const normalizeScriptLines = (input: unknown, params: GenerateScriptParams): Scr
     }
   }
 
-  if (expanded.length < 12 || expanded.length > 20) {
+  if (expanded.length < 20 || expanded.length > 40) {
     throw new AppError(
       "llm_invalid_line_count",
       `Script contains ${expanded.length} lines after normalization`,
@@ -208,6 +209,12 @@ const callLlm = async (params: GenerateScriptParams, temperature = 0.7, retryIns
   const isGoogle = params.llmBaseUrl.includes("generativelanguage.googleapis.com");
   const isGroq = params.llmBaseUrl.includes("groq.com");
 
+  const durationHints: Record<string, string> = {
+    short: "Target: 60-90 seconds, about 20-25 lines",
+    medium: "Target: 90-120 seconds, about 25-30 lines",
+    long: "Target: 120-180 seconds, about 30-40 lines",
+  };
+
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
     {
@@ -219,6 +226,7 @@ const callLlm = async (params: GenerateScriptParams, temperature = 0.7, retryIns
         `Speaker B persona: ${params.speakerBPersona}`,
         `Tone: ${params.tone}`,
         `Language: ${params.language}`,
+        `Video duration: ${params.videoDuration} (${durationHints[params.videoDuration] || "medium"})`,
         `Speaker A default temperature: ${params.tempA}`,
         `Speaker B default temperature: ${params.tempB}`,
       ].filter(Boolean).join("\n"),

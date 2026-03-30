@@ -1,6 +1,6 @@
 "use client";
 
-import { duoPresets } from "@/lib/catalog";
+import { duoPresets, gameBackgroundCatalog, getRandomVideo } from "@/lib/catalog";
 import type { EditorForm } from "./types";
 
 interface ConceptStepProps {
@@ -91,7 +91,6 @@ export const ConceptStep = ({ form, onFormChange, onUploadSticker, message }: Co
             />
             {form.stickerUrlA && (
               <div className="sticker-preview">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={form.stickerUrlA} alt="Speaker A sticker" />
                 <span>✓ Custom sticker uploaded</span>
               </div>
@@ -127,7 +126,6 @@ export const ConceptStep = ({ form, onFormChange, onUploadSticker, message }: Co
             />
             {form.stickerUrlB && (
               <div className="sticker-preview">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={form.stickerUrlB} alt="Speaker B sticker" />
                 <span>✓ Custom sticker uploaded</span>
               </div>
@@ -138,18 +136,37 @@ export const ConceptStep = ({ form, onFormChange, onUploadSticker, message }: Co
 
       <section className="panel-block">
         <div className="panel-intro">
-          <strong>Background (Optional)</strong>
-          <span className="panel-hint">Add a background video or image URL</span>
+          <strong>Background Video</strong>
+          <span className="panel-hint">Pick a game to use a random video background</span>
         </div>
-        <label className="field-block">
-          <span>Background URL</span>
-          <input
-            type="url"
-            value={form.backgroundUrl}
-            onChange={(e) => onFormChange({ ...form, backgroundUrl: e.target.value })}
-            placeholder="https://..."
-          />
-        </label>
+        <div className="game-background-grid">
+          {gameBackgroundCatalog.map((game) => (
+            <button
+              key={game.id}
+              className={`game-background-card ${form.backgroundUrl && form.backgroundUrl.includes(game.id) ? 'active' : ''}`}
+              onClick={() => {
+                const videoUrl = getRandomVideo(game.id);
+                onFormChange({ ...form, backgroundUrl: videoUrl || '' });
+              }}
+            >
+              <strong>{game.label}</strong>
+              <span>{game.videos.length} clips</span>
+            </button>
+          ))}
+        </div>
+        {form.backgroundUrl && (
+          <div className="selected-background">
+            <span className="bg-label">Selected:</span>
+            <span className="bg-url">{form.backgroundUrl.split('/').pop()}</span>
+            <button
+              type="button"
+              className="bg-clear-btn"
+              onClick={() => onFormChange({ ...form, backgroundUrl: '' })}
+            >
+              ×
+            </button>
+          </div>
+        )}
       </section>
 
       {message && <div className="status-chip">{message}</div>}

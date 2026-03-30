@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Cormorant_Garamond, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import "./landing.css";
+import "./editor-creative.css";
 import { Providers } from "./providers";
 
 const headlineFont = Cormorant_Garamond({

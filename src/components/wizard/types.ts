@@ -5,6 +5,10 @@ import type { ScriptLine } from "@/lib/scriptGen";
 export type WizardStep = 1 | 2 | 3 | 4 | 5;
 
 export type StickerAnim = "bounce" | "slide" | "float" | "pulse" | "shake" | "static" | "spin";
+export type SubtitlePosition = "top" | "middle" | "bottom";
+export type StickerShape = "circle" | "rounded-square" | "hexagon";
+export type ColorGrading = "none" | "warm" | "cool" | "vintage" | "cinematic" | "noir";
+export type FontFamily = "Inter" | "Montserrat" | "Poppins" | "Roboto" | "Oswald" | "Bebas Neue" | "Anton";
 
 export type EditorForm = {
   topic: string;
@@ -16,6 +20,7 @@ export type EditorForm = {
   voiceMode: "fish-api" | "colab";
   subtitleStyle: string;
   stickerAnim: StickerAnim;
+  stickerShape: StickerShape;
   stickerUrlA: string;
   stickerUrlB: string;
   backgroundUrl: string;
@@ -25,6 +30,14 @@ export type EditorForm = {
   resolution: "720p" | "480p";
   ctaText: string;
   draftId?: string;
+  // New creative fields
+  subtitlePosition: SubtitlePosition;
+  subtitleSize: number;
+  subtitleColor: string;
+  subtitleOutlineColor: string;
+  subtitleOutlineWidth: number;
+  subtitleFontFamily: FontFamily;
+  colorGrading: ColorGrading;
 };
 
 export type CompletedSteps = Set<WizardStep>;
@@ -33,7 +46,7 @@ export type SettingsState = {
   llmBaseUrl: string;
   llmModel: string;
   llmApiKey: string;
-  ttsProvider: "fish" | "huggingface" | "elevenlabs";
+  ttsProvider: "fish" | "huggingface" | "elevenlabs" | "polly";
   fishModelA: string;
   fishModelB: string;
   fishApiKey: string;
@@ -43,6 +56,8 @@ export type SettingsState = {
   elevenLabsVoiceA: string;
   elevenLabsVoiceB: string;
   elevenLabsApiKey: string;
+  pollyVoiceA: string;
+  pollyVoiceB: string;
   colabUrl: string;
   hasLlmApiKey?: boolean;
   hasFishApiKey?: boolean;

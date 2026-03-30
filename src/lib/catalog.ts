@@ -36,6 +36,7 @@ export const voicePresetCatalog = [
     previewUrl: "",
     recommendedEmotion: "neutral",
     recommendedRate: 0.98,
+    hasRefAudio: true,
   },
   {
     id: "nova-spark",
@@ -47,6 +48,7 @@ export const voicePresetCatalog = [
     previewUrl: "",
     recommendedEmotion: "excited",
     recommendedRate: 1.08,
+    hasRefAudio: true,
   },
   {
     id: "saffron-note",
@@ -58,6 +60,7 @@ export const voicePresetCatalog = [
     previewUrl: "",
     recommendedEmotion: "happy",
     recommendedRate: 1.02,
+    hasRefAudio: true,
   },
   {
     id: "midnight-proof",
@@ -69,8 +72,11 @@ export const voicePresetCatalog = [
     previewUrl: "",
     recommendedEmotion: "neutral",
     recommendedRate: 0.96,
+    hasRefAudio: true,
   },
 ];
+
+export type VoicePreset = typeof voicePresetCatalog[number];
 
 export const assetPackCatalog = [
   {
@@ -92,6 +98,113 @@ export const assetPackCatalog = [
     description: "Data-grid loops built for analytics, finance, and product education shorts.",
   },
 ];
+
+export const pollyVoiceCatalog = [
+  { id: "Matthew", label: "Matthew (US Male)", language: "en-US", gender: "male", tags: ["clear", "narration", "news"] },
+  { id: "Joanna", label: "Joanna (US Female)", language: "en-US", gender: "female", tags: ["warm", "friendly", "conversational"] },
+  { id: "Ivy", label: "Ivy (US Child)", language: "en-US", gender: "female", tags: ["youthful", "energetic"] },
+  { id: "Kevin", label: "Kevin (US Male)", language: "en-US", gender: "male", tags: ["casual", "modern"] },
+  { id: "Justin", label: "Justin (US Male)", language: "en-US", gender: "male", tags: ["deep", "authoritative"] },
+  { id: "Kendra", label: "Kendra (US Female)", language: "en-US", gender: "female", tags: ["professional", "clear"] },
+  { id: "Amy", label: "Amy (UK Female)", language: "en-GB", gender: "female", tags: ["british", "elegant"] },
+  { id: "Brian", label: "Brian (UK Male)", language: "en-GB", gender: "male", tags: ["british", "distinguished"] },
+  { id: "Arthur", label: "Arthur (UK Male)", language: "en-GB", gender: "male", tags: ["british", "deep"] },
+  { id: "Emma", label: "Emma (UK Female)", language: "en-GB", gender: "female", tags: ["british", "warm"] },
+  { id: "Kajal", label: "Kajal (Indian Female)", language: "en-IN", gender: "female", tags: ["indian", "warm", "bilingual"] },
+  { id: "Aditi", label: "Aditi (Indian Female)", language: "en-IN", gender: "female", tags: ["indian", "clear", "bilingual"] },
+  { id: "Nicole", label: "Nicole (AU Female)", language: "en-AU", gender: "female", tags: ["australian", "friendly"] },
+  { id: "Russell", label: "Russell (AU Male)", language: "en-AU", gender: "male", tags: ["australian", "casual"] },
+] as const;
+
+export type PollyVoice = typeof pollyVoiceCatalog[number];
+
+export const gameBackgroundCatalog = [
+  {
+    id: "fortnite",
+    label: "Fortnite",
+    description: "Epic gaming moments and battle royale clips",
+    videos: [
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Fortnite/split_001.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Fortnite/split_002.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Fortnite/split_003.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Fortnite/split_004.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Fortnite/split_005.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Fortnite/split_006.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Fortnite/split_007.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Fortnite/split_008.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Fortnite/split_009.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Fortnite/split_010.mp4",
+    ],
+  },
+  {
+    id: "gta",
+    label: "GTA V",
+    description: "Open world chaos and heist highlights",
+    videos: [
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_2.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_3.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_7.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_9.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_11.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_12.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_13.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_14.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_15.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_16.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_17.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/GTA/video_18.mp4",
+    ],
+  },
+  {
+    id: "minecraft",
+    label: "Minecraft",
+    description: "Building adventures and blocky action",
+    videos: [
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_001.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_002.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_005.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_006.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_007.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_008.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_009.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_010.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_011.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_012.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_013.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_014.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_015.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_016.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_017.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_018.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_019.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_022.mp4",
+    ],
+  },
+  {
+    id: "subway",
+    label: "Subway Surfers",
+    description: "Endless runner highlights and city dashes",
+    videos: [
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Subway/reel_000.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Subway/reel_001.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Subway/reel_002.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Subway/reel_003.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Subway/reel_004.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Subway/reel_005.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Subway/reel_006.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Subway/reel_007.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Subway/reel_008.mp4",
+    ],
+  },
+];
+
+export type GameBackground = typeof gameBackgroundCatalog[number];
+
+export const getRandomVideo = (gameId: string): string | null => {
+  const game = gameBackgroundCatalog.find(g => g.id === gameId);
+  if (!game || game.videos.length === 0) return null;
+  return game.videos[Math.floor(Math.random() * game.videos.length)];
+};
 
 export const subtitlePresetCatalog = [
   {

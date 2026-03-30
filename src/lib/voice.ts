@@ -1,7 +1,44 @@
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { InferenceClient } from "@huggingface/inference";
+import { PollyClient, SynthesizeSpeechCommand, Engine, OutputFormat, TextType } from "@aws-sdk/client-polly";
 
 import { AppError } from "@/lib/errors";
+import { customVoices, users } from "@/db/schema";
+import { db } from "@/lib/db";
+import { getPresetRefAudioUrl, presignedGet } from "@/lib/s3";
+import { voicePresetCatalog } from "@/lib/catalog";
+
+export const resolvePresetRefUrl = async (voiceId: string, userId?: string): Promise<string | null> => {
+  const preset = voicePresetCatalog.find((p) => p.id === voiceId || p.fishModelId === voiceId);
+  if (preset?.hasRefAudio) {
+    return getPresetRefAudioUrl(voiceId);
+  }
+
+  if (userId) {
+    const [customVoice] = await db
+      .select({
+        referenceAudioKey: customVoices.referenceAudioKey,
+        s3Bucket: users.s3Bucket,
+        s3Region: users.s3Region,
+      })
+      .from(customVoices)
+      .innerJoin(users, eq(customVoices.userId, users.id))
+      .where(eq(customVoices.id, voiceId))
+      .limit(1);
+
+    if (customVoice?.referenceAudioKey && customVoice.s3Bucket) {
+      return presignedGet({
+        bucket: customVoice.s3Bucket,
+        key: customVoice.referenceAudioKey,
+        expiresIn: 3600,
+        region: customVoice.s3Region ?? undefined,
+      });
+    }
+  }
+
+  return null;
+};
 
 const generatedLineSchema = z.object({
   id: z.string(),
@@ -21,8 +58,11 @@ const jobSpeakerConfigSchema = z.object({
   stickerUrl: z.string().default(""),
   position: z.enum(["top", "bottom"]).default("top"),
   modelId: z.string().optional(),
+  refAudioUrl: z.string().optional(),
   refText: z.string().optional(),
 });
+
+export type JobSpeakerConfig = z.infer<typeof jobSpeakerConfigSchema>;
 
 const presignedUrlsSchema = z.object({
   lines: z.record(z.string(), z.string().url()),
@@ -34,7 +74,7 @@ export const voiceJobSchema = z.object({
   jobId: z.string().uuid(),
   userId: z.string().uuid(),
   bucket: z.string(),
-  region: z.string().default("ap-east-1"),
+  region: z.string().default("us-east-1"),
   colabUrl: z.string().url().optional(),
   lines: z.array(generatedLineSchema).min(1),
   speakerA: jobSpeakerConfigSchema,
@@ -555,6 +595,150 @@ export async function dispatchHuggingFaceVoiceJob(job: VoiceJob, hfToken: string
     } catch (error: any) {
       throw new AppError("hf_api_failed", `Hugging Face API failed: ${error.message}`, "Hugging Face could not generate the voice lines. Check your token and model.", 502);
     }
+  }
+
+  const transcript = buildSyntheticTranscript(payload.lines, durations);
+  await uploadToPresignedUrl(payload.presignedUrls.transcript, JSON.stringify(transcript.wordTimings), "application/json");
+
+  if (wavMeta) {
+    const masterWav = buildWav(wavMeta, masterChunks);
+    await uploadToPresignedUrl(payload.presignedUrls.master, masterWav, "audio/wav");
+  }
+
+  return {
+    stage: "voice_done",
+    progressPct: 100,
+    transcript,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Amazon Polly Neural TTS — Final Fallback Provider
+// ---------------------------------------------------------------------------
+
+const pollyEmotionMap: Record<string, string> = {
+  neutral: "moderate",
+  happy: "strong",
+  sad: "reduced",
+  angry: "strong",
+  surprised: "strong",
+  excited: "strong",
+  whispering: "reduced",
+  shouting: "strong",
+};
+
+const escapeXml = (input: string): string => {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+};
+
+const buildPollySsml = (text: string, speakingRate: number, pauseMs: number, emotion: string): string => {
+  const ratePercent = Math.round((speakingRate - 1) * 100);
+  const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
+
+  let innerSsml = escapeXml(text);
+
+  if (pauseMs > 0) {
+    innerSsml += `<break time="${Math.round(pauseMs)}ms"/>`;
+  }
+
+  return `<speak><prosody rate="${rateStr}">${innerSsml}</prosody></speak>`;
+};
+
+export async function dispatchPollyVoiceJob(
+  job: VoiceJob,
+  overrides?: { voiceIdA?: string; voiceIdB?: string; region?: string },
+) {
+  const payload = voiceJobSchema.parse(job);
+
+  const region = overrides?.region ?? process.env.AWS_REGION ?? "ap-south-1";
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+
+  if (!accessKeyId || !secretAccessKey) {
+    throw new AppError(
+      "polly_creds_missing",
+      "AWS credentials not configured for Polly",
+      "Amazon Polly requires AWS credentials. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in your environment.",
+      400,
+    );
+  }
+
+  const pollyClient = new PollyClient({
+    region,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+
+  const voiceIdA = overrides?.voiceIdA ?? "Matthew";
+  const voiceIdB = overrides?.voiceIdB ?? "Joanna";
+
+  let wavMeta: Pick<WavMeta, "sampleRate" | "channels" | "bitsPerSample"> | null = null;
+  const masterChunks: Uint8Array[] = [];
+  const durations: number[] = [];
+
+  for (const line of payload.lines) {
+    const voiceId = line.speaker === "A" ? voiceIdA : voiceIdB;
+    const ssml = buildPollySsml(line.text, line.speaking_rate, line.pause_ms, line.emotion);
+
+    let audioBuffer: Buffer;
+
+    try {
+      const command = new SynthesizeSpeechCommand({
+        Engine: Engine.NEURAL,
+        OutputFormat: OutputFormat.PCM,
+        SampleRate: "16000",
+        Text: ssml,
+        TextType: TextType.SSML,
+        VoiceId: voiceId as any,
+      });
+
+      const response = await pollyClient.send(command);
+
+      if (!response.AudioStream) {
+        throw new AppError("polly_no_audio", "Polly returned empty audio stream", "Amazon Polly did not return audio for this line.", 502);
+      }
+
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of response.AudioStream as AsyncIterable<Uint8Array>) {
+        chunks.push(chunk);
+      }
+
+      const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+      const combined = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+      }
+      audioBuffer = Buffer.from(combined);
+    } catch (error: any) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        "polly_api_failed",
+        `Polly synthesis failed: ${error.message}`,
+        "Amazon Polly could not generate the voice line. Check your AWS credentials and Polly permissions.",
+        502,
+      );
+    }
+
+    // Polly returns raw PCM — wrap in WAV header
+    const pcmData = new Uint8Array(audioBuffer);
+    const lineWavMeta = { sampleRate: 16000, channels: 1, bitsPerSample: 16 };
+    const lineWav = buildWav(lineWavMeta, [pcmData]);
+    const lineDuration = pcmData.length / (16000 * 2); // 16-bit mono = 2 bytes per sample
+
+    if (!wavMeta) {
+      wavMeta = lineWavMeta;
+    }
+
+    masterChunks.push(pcmData, createSilence(wavMeta, line.pause_ms));
+    durations.push(lineDuration);
+
+    await uploadToPresignedUrl(payload.presignedUrls.lines[line.id], lineWav, "audio/wav");
   }
 
   const transcript = buildSyntheticTranscript(payload.lines, durations);

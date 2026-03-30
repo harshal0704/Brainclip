@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 type CustomVoice = {
   id: string;
@@ -43,6 +43,15 @@ type VoiceFormData = {
   recommendedRate: number;
 };
 
+type UploadStage = "idle" | "validating" | "uploading" | "processing" | "complete" | "error";
+
+interface FileValidation {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  estimatedDuration?: string;
+}
+
 const defaultFormData: VoiceFormData = {
   name: "",
   description: "",
@@ -53,6 +62,12 @@ const defaultFormData: VoiceFormData = {
   recommendedEmotion: "neutral",
   recommendedRate: 1.0,
 };
+
+const SUPPORTED_FORMATS = ["audio/wav", "audio/mpeg", "audio/mp3", "audio/ogg", "audio/webm", "audio/m4a", "audio/aac", "audio/x-wav"];
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_DURATION_SEC = 300; // 5 minutes
+const MIN_DURATION_SEC = 3;
+const RECOMMENDED_DURATION_SEC = 30;
 
 const formatDuration = (seconds: number | null) => {
   if (!seconds) return "--";
@@ -66,6 +81,57 @@ const formatFileSize = (bytes: number | null) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const validateAudioFile = async (file: File): Promise<FileValidation> => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!SUPPORTED_FORMATS.includes(file.type) && !file.name.match(/\.(wav|mp3|ogg|webm|m4a|aac)$/i)) {
+    errors.push(`Unsupported format: ${file.type || "unknown"}. Use WAV, MP3, OGG, WebM, or M4A.`);
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    errors.push(`File too large: ${formatFileSize(file.size)}. Maximum is 50MB.`);
+  }
+
+  if (file.size < 1024) {
+    errors.push("File appears to be empty or corrupted.");
+  }
+
+  // Try to estimate duration from file size (rough estimate for compressed formats)
+  const estimatedKbps = file.type.includes("mpeg") || file.type.includes("mp3") ? 128 : 256;
+  const estimatedDurationSec = (file.size / 1024 / estimatedKbps);
+  
+  if (estimatedDurationSec < MIN_DURATION_SEC) {
+    warnings.push(`File may be too short (estimated ${formatDuration(estimatedDurationSec)}). Aim for at least ${MIN_DURATION_SEC} seconds.`);
+  }
+
+  if (estimatedDurationSec > MAX_DURATION_SEC) {
+    errors.push(`File may be too long (estimated ${formatDuration(estimatedDurationSec)}). Maximum is ${formatDuration(MAX_DURATION_SEC)}.`);
+  }
+
+  if (estimatedDurationSec < RECOMMENDED_DURATION_SEC && estimatedDurationSec >= MIN_DURATION_SEC) {
+    warnings.push(`For best cloning results, use at least ${RECOMMENDED_DURATION_SEC} seconds of audio.`);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    estimatedDuration: formatDuration(estimatedDurationSec),
+  };
+};
+
+const getUploadStageLabel = (stage: UploadStage): string => {
+  switch (stage) {
+    case "validating": return "Validating file...";
+    case "uploading": return "Uploading audio...";
+    case "processing": return "Processing & cloning...";
+    case "complete": return "Upload complete!";
+    case "error": return "Upload failed";
+    default: return "";
+  }
 };
 
 export type VoiceLibraryProps = {
@@ -92,9 +158,13 @@ export const VoiceLibrary = ({
   // Upload state
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState<UploadStage>("idle");
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFormData, setUploadFormData] = useState<VoiceFormData>(defaultFormData);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileValidation, setFileValidation] = useState<FileValidation | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
   
   // Edit state
   const [editingVoice, setEditingVoice] = useState<CustomVoice | null>(null);
@@ -108,6 +178,15 @@ export const VoiceLibrary = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterLanguage, setFilterLanguage] = useState("");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+
+  // Cleanup preview URL on unmount
+  useEffect(() => {
+    return () => {
+      if (previewAudioUrl) {
+        URL.revokeObjectURL(previewAudioUrl);
+      }
+    };
+  }, [previewAudioUrl]);
 
   const loadVoices = useCallback(async () => {
     setLoading(true);
@@ -164,58 +243,170 @@ export const VoiceLibrary = ({
     await audio.play();
   };
 
-  // Upload handlers
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
+  // Handle file selection with validation
+  const handleFileSelection = async (file: File) => {
+    // Cleanup previous preview
+    if (previewAudioUrl) {
+      URL.revokeObjectURL(previewAudioUrl);
+      setPreviewAudioUrl(null);
+    }
+
     setSelectedFile(file);
+    setFileValidation(null);
+    setUploadStage("validating");
+    
+    // Auto-fill name if empty
     if (!uploadFormData.name) {
       setUploadFormData(prev => ({
         ...prev,
         name: file.name.replace(/\.[^/.]+$/, ""),
       }));
     }
+
+    // Create preview URL
+    const url = URL.createObjectURL(file);
+    setPreviewAudioUrl(url);
+
+    // Validate file
+    const validation = await validateAudioFile(file);
+    setFileValidation(validation);
+    setUploadStage("idle");
   };
 
+  // File input change handler
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleFileSelection(file);
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+
+    const files = event.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.type.startsWith("audio/") || file.name.match(/\.(wav|mp3|ogg|webm|m4a|aac)$/i)) {
+        handleFileSelection(file);
+      } else {
+        setMessage("Please drop an audio file (WAV, MP3, OGG, WebM, or M4A)");
+      }
+    }
+  };
+
+  // Preview uploaded file
+  const previewUploadedFile = () => {
+    if (previewAudioUrl && audioRef.current) {
+      if (audioRef.current.src === previewAudioUrl) {
+        audioRef.current.play();
+      } else {
+        audioRef.current.src = previewAudioUrl;
+        audioRef.current.play();
+      }
+    }
+  };
+
+  // Clear selected file
+  const clearSelectedFile = () => {
+    if (previewAudioUrl) {
+      URL.revokeObjectURL(previewAudioUrl);
+      setPreviewAudioUrl(null);
+    }
+    setSelectedFile(null);
+    setFileValidation(null);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
+  };
+
+  // Upload handler with multi-stage progress
   const handleUpload = async () => {
     if (!selectedFile) {
       setMessage("Please select an audio file");
       return;
     }
 
+    if (fileValidation && !fileValidation.valid) {
+      setMessage("Please fix the file errors before uploading");
+      return;
+    }
+
     setIsUploading(true);
+    setUploadStage("uploading");
     setUploadProgress(10);
-    setMessage("Uploading voice...");
+    setMessage("Starting upload...");
 
     try {
       const formData = new FormData();
       formData.append("audio", selectedFile);
       formData.append("metadata", JSON.stringify(uploadFormData));
 
+      // Simulate progress during upload phase
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 60) {
+            clearInterval(progressInterval);
+            return 60;
+          }
+          return prev + 5;
+        });
+      }, 200);
+
       const response = await fetch("/api/voices/upload", {
         method: "POST",
         body: formData,
       });
 
+      clearInterval(progressInterval);
+      
       setUploadProgress(70);
+      setUploadStage("processing");
+      setMessage("Processing your voice...");
+
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error?.userMessage || "Upload failed");
+        throw new Error(data.error?.userMessage || data.error || "Upload failed");
       }
 
-      setUploadProgress(100);
-      setMessage(data.nextSteps?.message || "Voice uploaded successfully!");
+      setUploadProgress(90);
+      setUploadStage("complete");
+      setMessage("Voice uploaded successfully!");
+      
+      // Brief delay to show completion
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       setShowUploadModal(false);
       setSelectedFile(null);
+      setFileValidation(null);
       setUploadFormData(defaultFormData);
+      setPreviewAudioUrl(null);
+      setUploadProgress(0);
+      setUploadStage("idle");
       await loadVoices();
     } catch (err) {
+      setUploadStage("error");
       setMessage(err instanceof Error ? err.message : "Upload failed");
+      setUploadProgress(0);
     } finally {
       setIsUploading(false);
-      setUploadProgress(0);
     }
   };
 
@@ -322,22 +513,27 @@ export const VoiceLibrary = ({
     }
   };
 
-  // Filter voices
-  const filteredVoices = voices.filter(voice => {
-    if (showFavoritesOnly && !voice.isFavorite) return false;
-    if (filterLanguage && voice.language !== filterLanguage) return false;
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return (
-        voice.name.toLowerCase().includes(query) ||
-        voice.description?.toLowerCase().includes(query) ||
-        voice.tags.some(tag => tag.toLowerCase().includes(query))
-      );
-    }
-    return true;
-  });
+  // Filter voices - memoized for performance
+  const filteredVoices = useMemo(() => {
+    return voices.filter(voice => {
+      if (showFavoritesOnly && !voice.isFavorite) return false;
+      if (filterLanguage && voice.language !== filterLanguage) return false;
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return (
+          voice.name.toLowerCase().includes(query) ||
+          voice.description?.toLowerCase().includes(query) ||
+          voice.tags.some(tag => tag.toLowerCase().includes(query))
+        );
+      }
+      return true;
+    });
+  }, [voices, showFavoritesOnly, filterLanguage, searchQuery]);
 
-  const uniqueLanguages = [...new Set(voices.map(v => v.language).filter(Boolean))];
+  const uniqueLanguages = useMemo(
+    () => [...new Set(voices.map(v => v.language).filter(Boolean))],
+    [voices]
+  );
 
   if (loading) {
     return (
@@ -507,29 +703,141 @@ export const VoiceLibrary = ({
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="voice-modal-overlay" onClick={() => setShowUploadModal(false)}>
+        <div className="voice-modal-overlay" onClick={() => !isUploading && setShowUploadModal(false)}>
           <div className="voice-modal" onClick={e => e.stopPropagation()}>
             <div className="voice-modal-header">
               <h3>Upload Voice Reference</h3>
-              <button className="voice-modal-close" onClick={() => setShowUploadModal(false)}>×</button>
+              {!isUploading && (
+                <button className="voice-modal-close" onClick={() => setShowUploadModal(false)}>×</button>
+              )}
             </div>
 
             <div className="voice-modal-body">
-              <div className="voice-upload-zone">
+              {/* Improved Drag & Drop Zone */}
+              <div 
+                className={`voice-upload-zone ${isDragging ? "dragging" : ""} ${selectedFile ? "has-file" : ""}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
                 <input
                   type="file"
-                  accept="audio/wav,audio/mp3,audio/mpeg,audio/ogg,audio/webm,.wav,.mp3"
+                  accept="audio/*,.wav,.mp3,.ogg,.webm,.m4a,.aac"
                   onChange={handleFileSelect}
                   id="voice-file-input"
+                  disabled={isUploading}
                 />
-                <label htmlFor="voice-file-input" className="voice-upload-label">
-                  {selectedFile ? (
-                    <span>{selectedFile.name} ({formatFileSize(selectedFile.size)})</span>
-                  ) : (
-                    <span>Click to select audio file<br/>(WAV, MP3 - max 50MB)</span>
-                  )}
-                </label>
+                
+                {selectedFile ? (
+                  <div className="voice-upload-preview">
+                    <div className="voice-preview-icon">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M9 18V5l12-2v13"/>
+                        <circle cx="6" cy="18" r="3"/>
+                        <circle cx="18" cy="16" r="3"/>
+                      </svg>
+                    </div>
+                    <div className="voice-preview-info">
+                      <strong className="voice-preview-name">{selectedFile.name}</strong>
+                      <span className="voice-preview-meta">
+                        {formatFileSize(selectedFile.size)} • {selectedFile.type.split("/")[1]?.toUpperCase() || "AUDIO"}
+                      </span>
+                      {fileValidation?.estimatedDuration && (
+                        <span className="voice-preview-duration">
+                          Est. duration: ~{fileValidation.estimatedDuration}
+                        </span>
+                      )}
+                    </div>
+                    {previewAudioUrl && !isUploading && (
+                      <div className="voice-preview-actions">
+                        <button 
+                          type="button" 
+                          className="voice-preview-play"
+                          onClick={previewUploadedFile}
+                          title="Preview audio"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M8 5v14l11-7z"/>
+                          </svg>
+                          Preview
+                        </button>
+                        <button 
+                          type="button" 
+                          className="voice-preview-remove"
+                          onClick={clearSelectedFile}
+                          title="Remove file"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <label htmlFor="voice-file-input" className="voice-upload-label">
+                    <div className="voice-upload-icon">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                    </div>
+                    <span className="voice-upload-text">
+                      <strong>Drop your audio file here</strong>
+                      <span>or click to browse</span>
+                    </span>
+                    <span className="voice-upload-hint">WAV, MP3, OGG, WebM, M4A • Max 50MB</span>
+                  </label>
+                )}
               </div>
+
+              {/* Validation Results */}
+              {fileValidation && (
+                <div className={`voice-validation ${fileValidation.valid ? "valid" : "invalid"}`}>
+                  {fileValidation.errors.length > 0 && (
+                    <div className="voice-validation-errors">
+                      {fileValidation.errors.map((err, i) => (
+                        <div key={i} className="voice-validation-item error">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="15" y1="9" x2="9" y2="15"/>
+                            <line x1="9" y1="9" x2="15" y2="15"/>
+                          </svg>
+                          {err}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {fileValidation.warnings.length > 0 && (
+                    <div className="voice-validation-warnings">
+                      {fileValidation.warnings.map((warn, i) => (
+                        <div key={i} className="voice-validation-item warning">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                          </svg>
+                          {warn}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {fileValidation.valid && fileValidation.warnings.length === 0 && (
+                    <div className="voice-validation-item success">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                      </svg>
+                      File looks good! Ready to upload.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Hidden audio element for preview */}
+              <audio ref={audioRef} style={{ display: "none" }} />
 
               <div className="voice-form-grid">
                 <label className="voice-form-field">
@@ -539,6 +847,7 @@ export const VoiceLibrary = ({
                     value={uploadFormData.name}
                     onChange={e => setUploadFormData(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="My Custom Voice"
+                    disabled={isUploading}
                   />
                 </label>
 
@@ -549,6 +858,7 @@ export const VoiceLibrary = ({
                     onChange={e => setUploadFormData(prev => ({ ...prev, description: e.target.value }))}
                     placeholder="Optional description of this voice"
                     rows={2}
+                    disabled={isUploading}
                   />
                 </label>
 
@@ -558,6 +868,7 @@ export const VoiceLibrary = ({
                     <select
                       value={uploadFormData.language}
                       onChange={e => setUploadFormData(prev => ({ ...prev, language: e.target.value }))}
+                      disabled={isUploading}
                     >
                       <option value="en">English</option>
                       <option value="es">Spanish</option>
@@ -575,6 +886,7 @@ export const VoiceLibrary = ({
                     <select
                       value={uploadFormData.gender}
                       onChange={e => setUploadFormData(prev => ({ ...prev, gender: e.target.value }))}
+                      disabled={isUploading}
                     >
                       <option value="">Not specified</option>
                       <option value="male">Male</option>
@@ -590,6 +902,7 @@ export const VoiceLibrary = ({
                     <select
                       value={uploadFormData.recommendedEmotion}
                       onChange={e => setUploadFormData(prev => ({ ...prev, recommendedEmotion: e.target.value }))}
+                      disabled={isUploading}
                     >
                       <option value="neutral">Neutral</option>
                       <option value="happy">Happy</option>
@@ -609,6 +922,7 @@ export const VoiceLibrary = ({
                       step="0.1"
                       value={uploadFormData.recommendedRate}
                       onChange={e => setUploadFormData(prev => ({ ...prev, recommendedRate: parseFloat(e.target.value) }))}
+                      disabled={isUploading}
                     />
                   </label>
                 </div>
@@ -623,24 +937,42 @@ export const VoiceLibrary = ({
                       tags: e.target.value.split(",").map(t => t.trim()).filter(Boolean),
                     }))}
                     placeholder="warm, professional, narrator"
+                    disabled={isUploading}
                   />
                 </label>
               </div>
 
+              {/* Multi-stage Progress */}
               {isUploading && (
                 <div className="voice-upload-progress">
-                  <div className="voice-progress-bar">
-                    <div className="voice-progress-fill" style={{ width: `${uploadProgress}%` }} />
+                  <div className="voice-progress-stages">
+                    <div className={`voice-stage ${uploadStage === "uploading" || uploadStage === "processing" || uploadStage === "complete" ? "active" : ""} ${uploadStage === "complete" ? "done" : ""}`}>
+                      <div className="voice-stage-dot">1</div>
+                      <span>Upload</span>
+                    </div>
+                    <div className="voice-stage-line"></div>
+                    <div className={`voice-stage ${uploadStage === "processing" || uploadStage === "complete" ? "active" : ""} ${uploadStage === "complete" ? "done" : ""}`}>
+                      <div className="voice-stage-dot">2</div>
+                      <span>Process</span>
+                    </div>
+                    <div className="voice-stage-line"></div>
+                    <div className={`voice-stage ${uploadStage === "complete" ? "active done" : ""}`}>
+                      <div className="voice-stage-dot">3</div>
+                      <span>Ready</span>
+                    </div>
                   </div>
-                  <span>{uploadProgress}% uploaded</span>
+                  <div className="voice-progress-bar">
+                    <div className={`voice-progress-fill ${uploadStage}`} style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                  <span className="voice-progress-status">{getUploadStageLabel(uploadStage)}</span>
                 </div>
               )}
 
               <div className="voice-upload-requirements">
-                <strong>Requirements for best results:</strong>
+                <strong>Tips for best results:</strong>
                 <ul>
-                  <li>10-60 seconds of clear speech</li>
-                  <li>Minimal background noise</li>
+                  <li>Use 30-60 seconds of clear speech for optimal cloning</li>
+                  <li>Minimal background noise works best</li>
                   <li>Single speaker only</li>
                   <li>WAV format preferred (16-bit, 44.1kHz)</li>
                 </ul>
@@ -658,9 +990,14 @@ export const VoiceLibrary = ({
               <button
                 className="primary-button"
                 onClick={handleUpload}
-                disabled={isUploading || !selectedFile || !uploadFormData.name}
+                disabled={isUploading || !selectedFile || !uploadFormData.name || !!(fileValidation && !fileValidation.valid)}
               >
-                {isUploading ? "Uploading..." : "Upload Voice"}
+                {isUploading ? (
+                  <span className="upload-button-loading">
+                    <span className="spinner"></span>
+                    {uploadStage === "uploading" ? "Uploading..." : uploadStage === "processing" ? "Processing..." : "Please wait..."}
+                  </span>
+                ) : "Upload Voice"}
               </button>
             </div>
           </div>

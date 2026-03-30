@@ -18,7 +18,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { users } from "@/db/schema";
 import { db } from "@/lib/db";
 
-const DEFAULT_REGION = process.env.AWS_REGION ?? "ap-east-1";
+const DEFAULT_REGION = process.env.AWS_REGION ?? "us-east-1";
 
 const getS3Client = (region = DEFAULT_REGION) => {
   return new S3Client({ region });
@@ -345,3 +345,17 @@ export const copyObject = async ({
     }),
   );
 };
+
+export const PRESETS_BUCKET = process.env.PRESETS_BUCKET || "brainclip-presets";
+export const PRESETS_PREFIX = process.env.PRESETS_PREFIX || "presets/";
+
+export const getPresetRefAudioUrl = async (voiceId: string, expiresIn = 3600): Promise<string> => {
+  return presignedGet({
+    bucket: PRESETS_BUCKET,
+    key: `${PRESETS_PREFIX}${voiceId}/reference.wav`,
+    expiresIn,
+    region: DEFAULT_REGION,
+  });
+};
+
+export const presetRefAudioKey = (voiceId: string) => `${PRESETS_PREFIX}${voiceId}/reference.wav`;

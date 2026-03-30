@@ -3,6 +3,23 @@ import { z } from "zod";
 import { AppError } from "@/lib/errors";
 import { presignedGet, presignedPut, deleteObject, headObject, putObjectFromBuffer } from "@/lib/s3";
 
+export type ColabCloneStatus = {
+  cacheKey: string;
+  speaker: string;
+  tokens_size_bytes: number;
+};
+
+async function fetchWithTimeout(url: string, timeoutMs = 10000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // Supported audio formats
 export const SUPPORTED_AUDIO_FORMATS = ["audio/wav", "audio/mpeg", "audio/mp3", "audio/ogg", "audio/webm", "audio/m4a", "audio/aac"] as const;
 export const MAX_VOICE_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -267,51 +284,99 @@ export const cloneVoiceWithFishAudio = async ({
   description?: string;
   apiKey: string;
 }) => {
-  // Fetch the reference audio
-  const audioResponse = await fetch(referenceAudioUrl);
-  if (!audioResponse.ok) {
-    throw new AppError("audio_fetch_failed", "Failed to fetch reference audio", "Could not retrieve your uploaded audio. Please try again.", 500);
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const audioResponse = await fetchWithTimeout(referenceAudioUrl, 15000);
+      if (!audioResponse.ok) {
+        if (audioResponse.status === 403 || audioResponse.status === 404) {
+          throw new AppError("audio_expired", "Reference audio URL expired", "Your uploaded audio link has expired. Please re-upload the audio file.", 400);
+        }
+        throw new AppError("audio_fetch_failed", `Failed to fetch reference audio: ${audioResponse.status}`, "Could not retrieve your uploaded audio. Please try again.", 500);
+      }
+
+      const audioBlob = await audioResponse.blob();
+
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "reference.wav");
+      formData.append("name", name);
+      if (description) {
+        formData.append("description", description);
+      }
+
+      const response = await fetch("https://api.fish.audio/v1/voice/clone", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        
+        if (response.status === 401) {
+          throw new AppError("fish_auth_failed", errorText, "Your Fish.audio API key is invalid.", 401);
+        }
+        
+        if (response.status === 429) {
+          throw new AppError("fish_rate_limited", errorText, "Fish.audio is rate limiting requests. Please try again later.", 429);
+        }
+
+        throw new AppError("fish_clone_failed", errorText, "Voice cloning failed. Please try a different audio sample.", 502);
+      }
+
+      const result = await response.json();
+
+      return {
+        modelId: result.id || result.model_id,
+        status: "ready",
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`Voice cloning attempt ${attempt} failed:`, lastError.message);
+      
+      if (attempt < 2) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
   }
 
-  const audioBlob = await audioResponse.blob();
+  throw new AppError("clone_retry_failed", lastError?.message || "Voice cloning failed after 2 attempts", "Please check your audio file and try again.", 500);
+};
 
-  // Create FormData for Fish.audio API
-  const formData = new FormData();
-  formData.append("audio", audioBlob, "reference.wav");
-  formData.append("name", name);
-  if (description) {
-    formData.append("description", description);
-  }
-
-  // Call Fish.audio clone endpoint
-  const response = await fetch("https://api.fish.audio/v1/voice/clone", {
+/**
+ * Clone voice using Colab S2-Pro encode_reference endpoint
+ * This encodes the reference audio to tokens locally without needing Fish.audio API
+ */
+export const cloneVoiceWithColab = async ({
+  refAudioUrl,
+  refText,
+  colabUrl,
+}: {
+  refAudioUrl: string;
+  refText: string;
+  colabUrl: string;
+}): Promise<ColabCloneStatus> => {
+  const response = await fetch(new URL("/voice/encode-ref", colabUrl), {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: formData,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ refAudioUrl, refText, speaker: "custom" }),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    
-    if (response.status === 401) {
-      throw new AppError("fish_auth_failed", errorText, "Your Fish.audio API key is invalid.", 401);
-    }
-    
-    if (response.status === 429) {
-      throw new AppError("fish_rate_limited", errorText, "Fish.audio is rate limiting requests. Please try again later.", 429);
-    }
-
-    throw new AppError("fish_clone_failed", errorText, "Voice cloning failed. Please try a different audio sample.", 502);
+    throw new AppError(
+      "colab_clone_failed",
+      errorText || `Colab clone failed: ${response.status}`,
+      "Voice encoding failed on Colab. Make sure your Colab session is running.",
+      502,
+    );
   }
 
-  const result = await response.json();
-
-  return {
-    modelId: result.id || result.model_id,
-    status: "ready",
-  };
+  return response.json() as Promise<ColabCloneStatus>;
 };
 
 /**

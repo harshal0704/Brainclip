@@ -1,43 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
+import { useEffect, useRef } from "react";
 import { duoPresets, subtitlePresetCatalog, voicePresetCatalog, assetPackCatalog } from "@/lib/catalog";
+import logo from "@/logo.png";
 
 /* ─── Data ─── */
 
 const pillars = [
   {
-    icon: (
-      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-        <circle cx="9" cy="7" r="4"></circle>
-        <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-      </svg>
-    ),
+    icon: "🎭",
     title: "Duo Dialogue",
     body: "Two AI voices in conversation. Formats engineered for retention.",
     accent: "var(--accent)",
   },
   {
-    icon: (
-      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-        <line x1="12" x2="12" y1="19" y2="22"></line>
-      </svg>
-    ),
+    icon: "🎙️",
     title: "Voice Studio",
     body: "Expressive voice packs or your own clone. Fully timed and tuned.",
     accent: "var(--sky)",
   },
   {
-    icon: (
-      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-      </svg>
-    ),
+    icon: "⚡",
     title: "1-Click Export",
     body: "HD vertical reels rendered in the cloud. Ready to post instantly.",
     accent: "var(--accent-deep)",
@@ -88,78 +73,6 @@ function useScrollReveal() {
   return ref;
 }
 
-/* ─── Hero Video Component ─── */
-
-function HeroVideo() {
-  const [isMuted, setIsMuted] = useState(true);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  const toggleMute = () => {
-    if (videoRef.current) {
-      videoRef.current.muted = !isMuted;
-      setIsMuted(!isMuted);
-    }
-  };
-
-  return (
-    <div 
-      className="hero-demo-video" 
-      style={{ 
-        position: "relative", 
-        width: "100%", 
-        maxWidth: "320px", 
-        margin: "0 auto", 
-        borderRadius: "36px", 
-        overflow: "hidden", 
-        boxShadow: "0 32px 80px rgba(0,0,0,0.18), inset 0 0 0 1px rgba(0,0,0,0.05)",
-        border: "8px solid #fcfbf9",
-        background: "#000",
-      }}
-    >
-      <video 
-        ref={videoRef}
-        src="https://brainclips-videos.s3.us-east-1.amazonaws.com/final.mp4" 
-        autoPlay 
-        muted 
-        loop 
-        playsInline
-        style={{ width: "100%", display: "block", aspectRatio: "9/16", objectFit: "cover" }}
-      />
-
-      {/* Dynamic island mockup for 'Vertical Reel' feel */}
-      <div style={{ position: "absolute", top: "12px", left: "50%", transform: "translateX(-50%)", width: "96px", height: "28px", background: "#000", borderRadius: "14px", zIndex: 10 }}></div>
-
-      <button 
-        onClick={toggleMute}
-        style={{
-          position: "absolute",
-          bottom: "24px",
-          right: "20px",
-          background: "rgba(0,0,0,0.6)",
-          color: "white",
-          border: "1px solid rgba(255,255,255,0.2)",
-          borderRadius: "50%",
-          width: "44px",
-          height: "44px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          backdropFilter: "blur(8px)",
-          fontSize: "1.2rem",
-          transition: "transform 150ms ease, background 150ms ease",
-          zIndex: 10
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.05)"; e.currentTarget.style.background = "rgba(0,0,0,0.8)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.background = "rgba(0,0,0,0.6)"; }}
-        aria-label={isMuted ? "Unmute" : "Mute"}
-      >
-        {isMuted ? "🔇" : "🔊"}
-      </button>
-    </div>
-  );
-}
-
 /* ─── Component ─── */
 
 export default function HomePage() {
@@ -171,7 +84,7 @@ export default function HomePage() {
       <nav className="landing-nav">
         <div className="nav-inner">
           <div className="nav-brand">
-            <span className="brand-mark" aria-hidden="true" />
+            <Image src={logo} alt="Brainclip logo" width={32} height={32} style={{ borderRadius: "8px", objectFit: "contain" }} />
             <span className="brand-text">Brainclip</span>
           </div>
           <div className="nav-links">
@@ -232,8 +145,20 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="hero-visual animate-hero delay-4">
-              <HeroVideo />
+            {/* Demo Video - Phone Frame */}
+            <div className="hero-media animate-hero delay-4" suppressHydrationWarning>
+              <div className="hero-video-frame" suppressHydrationWarning>
+                <div className="phone-notch" />
+                <video
+                  src="https://brainclips-videos.s3.us-east-1.amazonaws.com/final.mp4"
+                  preload="none"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  suppressHydrationWarning
+                />
+              </div>
             </div>
           </div>
         </section>
@@ -387,7 +312,9 @@ export default function HomePage() {
         <footer className="landing-footer">
           <div className="footer-inner">
             <span className="footer-brand">Brainclip</span>
-            <span className="footer-copy">© {new Date().getFullYear()} · Built for creators who move fast.</span>
+            <span className="footer-copy" suppressHydrationWarning>
+              © {new Date().getFullYear()} · Built for creators who move fast.
+            </span>
           </div>
         </footer>
       </main>

@@ -9,6 +9,7 @@ export const speakerSchema = z.object({
   color: z.string().default("#ffffff"),
   position: z.enum(["top", "bottom"]).default("top"),
   modelId: z.string().optional(),
+  refAudioUrl: z.string().optional(),
 });
 
 export const reactionStickerSchema = z.object({
