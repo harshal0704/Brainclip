@@ -110,6 +110,9 @@ const ensureS3RolePolicy = async (roleName: string) => {
   }
 };
 
+const TARGET_MEMORY_MB = 3008;
+const TARGET_TIMEOUT_SEC = 900;
+
 const main = async () => {
   console.log(`\n=== Step 1: Deploy Remotion Lambda function in ${region} ===`);
   runRemotion([
@@ -119,11 +122,11 @@ const main = async () => {
     "--region",
     region,
     "--memory",
-    "2048",
+    String(TARGET_MEMORY_MB),
     "--disk",
     "10240",
     "--timeout",
-    "120",
+    String(TARGET_TIMEOUT_SEC),
   ]);
 
   console.log(`\n=== Step 2: Create Remotion site ${siteName} ===`);
@@ -160,19 +163,32 @@ const main = async () => {
   );
 
   const currentTimeout = lambdaDetails.Configuration?.Timeout ?? 0;
-  const targetTimeout = 120;
+  const currentMemory = lambdaDetails.Configuration?.MemorySize ?? 0;
 
-  if (currentTimeout !== targetTimeout) {
-    console.log(`⚠️  Lambda timeout is ${currentTimeout}s (expected ${targetTimeout}s). Updating...`);
+  if (currentTimeout !== TARGET_TIMEOUT_SEC) {
+    console.log(`⚠️  Lambda timeout is ${currentTimeout}s (expected ${TARGET_TIMEOUT_SEC}s). Updating...`);
     await lambdaClient.send(
       new UpdateFunctionConfigurationCommand({
         FunctionName: functionName,
-        Timeout: targetTimeout,
+        Timeout: TARGET_TIMEOUT_SEC,
       }),
     );
-    console.log(`✅ Lambda timeout updated to ${targetTimeout}s.`);
+    console.log(`✅ Lambda timeout updated to ${TARGET_TIMEOUT_SEC}s.`);
   } else {
-    console.log(`✅ Lambda timeout verified at ${targetTimeout}s.`);
+    console.log(`✅ Lambda timeout verified at ${TARGET_TIMEOUT_SEC}s.`);
+  }
+
+  if (currentMemory !== TARGET_MEMORY_MB) {
+    console.log(`⚠️  Lambda memory is ${currentMemory}MB (expected ${TARGET_MEMORY_MB}MB). Updating...`);
+    await lambdaClient.send(
+      new UpdateFunctionConfigurationCommand({
+        FunctionName: functionName,
+        MemorySize: TARGET_MEMORY_MB,
+      }),
+    );
+    console.log(`✅ Lambda memory updated to ${TARGET_MEMORY_MB}MB.`);
+  } else {
+    console.log(`✅ Lambda memory verified at ${TARGET_MEMORY_MB}MB.`);
   }
 
   console.log(`\n=== Step 4: Attach S3 IAM policy ===`);

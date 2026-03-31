@@ -1,0 +1,65 @@
+name: Render Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      jobId:
+        description: 'Job ID'
+        required: true
+        type: string
+      inputProps:
+        description: 'Input Props JSON'
+        required: true
+        type: string
+      outKey:
+        description: 'S3 Output Key'
+        required: true
+        type: string
+      bucketName:
+        description: 'S3 Bucket Name'
+        required: true
+        type: string
+      region:
+        description: 'AWS Region'
+        required: true
+        type: string
+
+jobs:
+  render:
+    name: Render Video
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # 6 hours max
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write Input Props
+        run: echo '${{ github.event.inputs.inputProps }}' > inputProps.json
+
+      - name: Render Video
+        run: |
+          npx remotion render remotion/index.tsx ReelComposition out.mp4 --props=inputProps.json
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ github.event.inputs.region }}
+
+      - name: Upload to S3
+        run: |
+          aws s3 cp out.mp4 s3://${{ github.event.inputs.bucketName }}/${{ github.event.inputs.outKey }} --content-type video/mp4
+
+      - name: Notify Success (Optional)
+        run: echo "Render complete and uploaded to S3!"

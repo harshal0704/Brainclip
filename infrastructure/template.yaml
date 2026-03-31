@@ -7,14 +7,14 @@ Resources:
     Properties:
       CodeUri: ../remotion/
       Description: Renders a Remotion video for Brainclip.
-      MemorySize: 2048
-      Timeout: 120
+      MemorySize: 3008
+      Timeout: 240
       Handler: index.handler
       Runtime: nodejs24.x
       Architectures:
         - arm64
       EphemeralStorage:
-        Size: 10240
+        Size: 2048
       Environment:
         Variables:
           AWS_REGION: !Ref AWS::Region
@@ -60,13 +60,13 @@ Resources:
         ApplyOn: None
       Tags:
         - Key: remotion-ephemereal-storage-in-mb
-          Value: '10240'
+          Value: '2048'
         - Key: remotion-lambda
           Value: 'true'
         - Key: remotion-memory-in-mb
-          Value: '2048'
+          Value: '3008'
         - Key: remotion-timeout-in-seconds
-          Value: '120'
+          Value: '240'
         - Key: remotion-version
           Value: 4.0.438
       RuntimeManagementConfig:

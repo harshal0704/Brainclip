@@ -280,6 +280,7 @@ def _synthesize_s2pro(
     ref_tokens_bytes: bytes,
     emotion: str,
     speaking_rate: float,
+    model_id: str | None = None,
 ) -> np.ndarray:
     engine = _load_s2_engine()
 
@@ -288,6 +289,17 @@ def _synthesize_s2pro(
         full_text = f"{emotion_tag} {text}"
     else:
         full_text = text
+
+    if not ref_tokens_bytes:
+        if model_id and not model_id.startswith("http"):
+            raise RuntimeError(
+                f"Colab S2-Pro cannot use preset model '{model_id}'. "
+                "Use Fish.audio API (not Colab) for preset voices, or provide a reference audio URL for voice cloning."
+            )
+        raise RuntimeError(
+            "No reference audio provided. Colab S2-Pro requires either a reference audio URL "
+            "or use Fish.audio API for preset voices."
+        )
 
     if VLLM_OMNI_INSTALLED:
         ref_tokens_np = np.frombuffer(ref_tokens_bytes, dtype=np.int64)
@@ -347,14 +359,20 @@ async def _run_tts_job(job_id: str, payload: VoiceJobRequest) -> None:
 
         job_store[job_id] = {"stage": "encoding_reference", "progressPct": 5, "gpuMemFreeGb": gpu["mem_free_gb"]}
 
-        ref_a_url = payload.speakerA.modelId or ""
-        ref_b_url = payload.speakerB.modelId or ""
+        def _resolve_ref_audio(model_id: str | None, ref_text: str) -> bytes:
+            """Resolve reference audio: download if URL, otherwise use preset directly."""
+            if not model_id:
+                return b""
+            if model_id.startswith("http://") or model_id.startswith("https://"):
+                return _encode_ref_from_bytes(_download_audio(model_id), ref_text)
+            return b""  # Preset model ID - S2-Pro will use built-in preset
+
         ref_a_text = payload.speakerA.refText or payload.speakerA.label
         ref_b_text = payload.speakerB.refText or payload.speakerB.label
 
         try:
-            ref_a_bytes = _encode_ref_from_bytes(_download_audio(ref_a_url), ref_a_text) if ref_a_url else b""
-            ref_b_bytes = _encode_ref_from_bytes(_download_audio(ref_b_url), ref_b_text) if ref_b_url else b""
+            ref_a_bytes = _resolve_ref_audio(payload.speakerA.modelId, ref_a_text)
+            ref_b_bytes = _resolve_ref_audio(payload.speakerB.modelId, ref_b_text)
         except Exception as exc:
             job_store[job_id] = {"stage": "failed", "progressPct": 5, "error": f"Reference download/encode failed: {exc}"}
             return
@@ -367,6 +385,7 @@ async def _run_tts_job(job_id: str, payload: VoiceJobRequest) -> None:
 
         for i, line in enumerate(payload.lines):
             ref_tokens = ref_a_bytes if line.speaker == "A" else ref_b_bytes
+            model_id = payload.speakerA.modelId if line.speaker == "A" else payload.speakerB.modelId
 
             try:
                 audio = await loop.run_in_executor(
@@ -376,6 +395,7 @@ async def _run_tts_job(job_id: str, payload: VoiceJobRequest) -> None:
                     ref_tokens,
                     line.emotion,
                     line.speaking_rate,
+                    model_id,
                 )
             except torch.cuda.OutOfMemoryError:
                 job_store[job_id] = {
@@ -523,7 +543,6 @@ def clear_all_cache() -> dict[str, Any]:
             removed += 1
     return {"removed": removed}
 
-
 class RenderRequest(BaseModel):
     jobId: str
     inputProps: dict[str, Any]
@@ -541,21 +560,21 @@ async def start_render(req: RenderRequest, background_tasks: BackgroundTasks):
             import requests
             
             # Save input props
-            with open(f"/content/input_{job_id}.json", "w") as f:
+            with open(f"input_{job_id}.json", "w") as f:
                 json.dump(req.inputProps, f)
             
             # Install remotion dependencies if not already done
-            subprocess.run(["npm", "install"], cwd="/content/remotion", check=False)
+            subprocess.run(["npm", "install"], cwd="/content/Brainclip/remotion", check=False)
             
-            # Run remotion (note: we are in /content, remotion is in /content/remotion)
+            # Run remotion
             cmd = [
                 "npx", "remotion", "render", "ReelComposition", 
-                f"/content/out_{job_id}.mp4", 
-                f"--props=/content/input_{job_id}.json",
+                f"out_{job_id}.mp4", 
+                f"--props=../../input_{job_id}.json",
                 "--browser-executable=/usr/bin/chromium-browser"
             ]
             
-            process = subprocess.Popen(cmd, cwd="/content/remotion", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            process = subprocess.Popen(cmd, cwd="/content/Brainclip/remotion", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             
             for line in process.stdout:
                 print(f"[Render {job_id}] {line}", end="")
@@ -567,7 +586,7 @@ async def start_render(req: RenderRequest, background_tasks: BackgroundTasks):
                 return
                 
             # Upload to S3
-            out_file = f"/content/out_{job_id}.mp4"
+            out_file = f"/content/Brainclip/remotion/out_{job_id}.mp4"
             with open(out_file, "rb") as f:
                 r = requests.put(req.s3PutUrl, data=f, headers={"Content-Type": "video/mp4"})
                 if not r.ok:
@@ -583,3 +602,4 @@ async def start_render(req: RenderRequest, background_tasks: BackgroundTasks):
 
     background_tasks.add_task(render_task)
     return {"status": "started", "jobId": job_id}
+
