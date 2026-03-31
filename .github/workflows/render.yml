@@ -28,8 +28,8 @@ jobs:
   render:
     name: Render Video
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # 6 hours max
-    
+    timeout-minutes: 360
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,12 +43,37 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Determine Composition
+        id: comp
+        run: |
+          # Extract videoMode from inputProps to select the correct composition
+          VIDEO_MODE=$(echo '${{ github.event.inputs.inputProps }}' | node -e "
+            const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+            const mode = data.videoMode || 'duo-debate';
+            const map = {
+              'single-host': 'SingleHostComposition',
+              'single-presenter': 'SingleHostComposition',
+              'duo-interview': 'DuoInterviewComposition',
+              'duo-side-by-side': 'SideBySideComposition',
+              'duo-split-screen': 'SideBySideComposition',
+              'duo-debate': 'ReelComposition',
+            };
+            console.log(map[mode] || 'ReelComposition');
+          ")
+          echo "composition=$VIDEO_MODE" >> $GITHUB_OUTPUT
+          echo "Using composition: $VIDEO_MODE"
+
       - name: Write Input Props
         run: echo '${{ github.event.inputs.inputProps }}' > inputProps.json
 
       - name: Render Video
         run: |
-          npx remotion render remotion/index.tsx ReelComposition out.mp4 --props=inputProps.json
+          npx remotion render remotion/index.tsx ${{ steps.comp.outputs.composition }} out.mp4 \
+            --props=inputProps.json \
+            --codec=h264 \
+            --image-format=jpeg \
+            --crf=28 \
+            --log=verbose
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -59,7 +84,7 @@ jobs:
 
       - name: Upload to S3
         run: |
-          aws s3 cp out.mp4 s3://${{ github.event.inputs.bucketName }}/${{ github.event.inputs.outKey }} --content-type video/mp4
-
-      - name: Notify Success (Optional)
-        run: echo "Render complete and uploaded to S3!"
+          aws s3 cp out.mp4 \
+            "s3://${{ github.event.inputs.bucketName }}/${{ github.event.inputs.outKey }}" \
+            --content-type video/mp4
+          echo "✅ Video uploaded to s3://${{ github.event.inputs.bucketName }}/${{ github.event.inputs.outKey }}"
