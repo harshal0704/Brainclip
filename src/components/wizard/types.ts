@@ -24,6 +24,7 @@ export type EditorForm = {
   stickerUrlA: string;
   stickerUrlB: string;
   backgroundUrl: string;
+  backgroundGameId: string;
   bgDimOpacity: number;
   showProgressBar: boolean;
   assetPackId: string;

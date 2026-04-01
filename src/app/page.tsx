@@ -2,9 +2,49 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { duoPresets, subtitlePresetCatalog, voicePresetCatalog, assetPackCatalog } from "@/lib/catalog";
 import logo from "@/logo.png";
+
+/* ─── Lazy Hero Video Component ─── */
+const LazyHeroVideo = () => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isInView, setIsInView] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsInView(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (videoRef.current) {
+      observer.observe(videoRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <video
+      ref={videoRef}
+      src={isInView ? "https://brainclips-videos.s3.us-east-1.amazonaws.com/final.mp4" : undefined}
+      preload={isInView ? "auto" : "none"}
+      autoPlay={isInView}
+      muted
+      loop
+      playsInline
+      suppressHydrationWarning
+      onCanPlay={() => setIsLoaded(true)}
+      style={{ opacity: isLoaded ? 1 : 0, transition: "opacity 0.5s ease" }}
+    />
+  );
+};
 
 /* ─── Data ─── */
 
@@ -149,15 +189,7 @@ export default function HomePage() {
             <div className="hero-media animate-hero delay-4" suppressHydrationWarning>
               <div className="hero-video-frame" suppressHydrationWarning>
                 <div className="phone-notch" />
-                <video
-                  src="https://brainclips-videos.s3.us-east-1.amazonaws.com/final.mp4"
-                  preload="none"
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  suppressHydrationWarning
-                />
+                <LazyHeroVideo />
               </div>
             </div>
           </div>

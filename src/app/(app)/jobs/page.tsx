@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useWorkspace } from "@/components/workspace-provider";
 
 export default function JobsPage() {
@@ -16,8 +17,27 @@ export default function JobsPage() {
     startPollingJob,
     retryJob,
     deleteJob,
-    deleteOldJobs
+    deleteOldJobs,
+    refreshJobUrl
   } = useWorkspace();
+
+  const [detailJobUrl, setDetailJobUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedJobDetail?.status === "done") {
+      setDetailJobUrl(null);
+      refreshJobUrl(selectedJobDetail.id).then(() => {
+        fetch(`/api/jobs/${selectedJobDetail.id}/result`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.url) setDetailJobUrl(data.url);
+          })
+          .catch(() => {});
+      });
+    } else {
+      setDetailJobUrl(null);
+    }
+  }, [selectedJobDetail?.id, selectedJobDetail?.status, refreshJobUrl]);
 
   const completedJobs = jobs.filter((job) => job.status === "done").length;
 
@@ -92,6 +112,9 @@ export default function JobsPage() {
                   <span>{job.stage ?? "Waiting"}</span>
                 </div>
                 <div className="job-progress-pill">{job.progressPct}%</div>
+                {job.status === "done" && (
+                  <div className="job-download-hint">Click to download</div>
+                )}
               </button>
             ))
           )}
@@ -196,8 +219,8 @@ export default function JobsPage() {
 
               {selectedJobDetail.status === "done" && (
                 <div className="job-detail-actions">
-                  {jobResultUrl && selectedJobDetail.id === activeJobId && (
-                    <a className="primary-button" href={jobResultUrl} target="_blank">
+                  {detailJobUrl ? (
+                    <a className="primary-button" href={detailJobUrl} target="_blank">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                         <polyline points="7 10 12 15 17 10"/>
@@ -205,6 +228,28 @@ export default function JobsPage() {
                       </svg>
                       Download Video
                     </a>
+                  ) : (
+                    <button 
+                      className="primary-button"
+                      onClick={() => {
+                        fetch(`/api/jobs/${selectedJobDetail.id}/result`)
+                          .then(res => res.json())
+                          .then(data => {
+                            if (data.url) {
+                              setDetailJobUrl(data.url);
+                              window.open(data.url, "_blank");
+                            }
+                          })
+                          .catch(() => {});
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      Download Video
+                    </button>
                   )}
                   <button 
                     className="danger-button"

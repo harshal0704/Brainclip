@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { generatedScriptLineSchema } from "@/lib/scriptGen";
 import { getObjectJson, presignedGet, presignedPut } from "@/lib/s3";
+import { getRandomVideo } from "@/lib/catalog";
 
 export const speakerSchema = z.object({
   label: z.string().min(1),
@@ -310,9 +311,15 @@ export const buildRenderInputProps = async ({
   const wordTimings = transcriptKey ? await getObjectJson<HydratedWordTiming[]>({ bucket, key: transcriptKey, region }) : [];
   const hydratedLines = hydrateScriptLineTimings(scriptLines, wordTimings);
 
+  const backgroundGameId = (editConfig as Record<string, unknown>).backgroundGameId as string | undefined;
+  let resolvedBackgroundUrl = backgroundUrl ?? "";
+  if (backgroundGameId && !resolvedBackgroundUrl) {
+    resolvedBackgroundUrl = getRandomVideo(backgroundGameId) ?? "";
+  }
+
   return {
     audioSrc: audioKey ? await presignedGet({ bucket, key: audioKey, region, expiresIn: 3600 }) : "",
-    backgroundSrc: backgroundUrl ?? "",
+    backgroundSrc: resolvedBackgroundUrl,
     wordTimings,
     scriptLines: hydratedLines,
     speakerA,

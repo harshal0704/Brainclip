@@ -186,50 +186,110 @@ export async function triggerGithubRender(
   job: JobRecord,
   inputProps: Record<string, unknown>,
   bucketName: string,
-  region: string
+  region: string,
+  userToken?: string,
+  userRepo?: string
 ) {
-  const token = process.env.GITHUB_TOKEN;
-  const repo = process.env.GITHUB_REPO || "harshal0704/Brainclip";
+  // Fall back to .env values if user hasn't configured their own
+  const token = userToken || process.env.GITHUB_TOKEN || "";
+  const repo = userRepo || process.env.GITHUB_REPO || "";
 
   if (!token) {
     throw new AppError(
       "github_token_missing",
-      "Missing GITHUB_TOKEN environment variable",
-      "Add GITHUB_TOKEN to use GitHub Actions renderer.",
+      "Missing GitHub Personal Access Token",
+      "Set GITHUB_TOKEN in your .env file or add it in Settings.",
+      500
+    );
+  }
+
+  if (!repo) {
+    throw new AppError(
+      "github_repo_missing",
+      "Missing GitHub repository",
+      "Set GITHUB_REPO in your .env file or add it in Settings.",
       500
     );
   }
 
   const outKey = job.s3VideoKey || `jobs/${job.id}/final.mp4`;
+  const inputPropsJson = JSON.stringify(inputProps);
 
-  const response = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/render.yml/dispatches`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github.v3+json",
-      "Content-Type": "application/json",
+  // GitHub workflow_dispatch inputs have a 65535 character limit
+  if (inputPropsJson.length > 65000) {
+    console.warn(`[GitHub Render] inputProps is ${inputPropsJson.length} chars — may exceed GitHub limit`);
+  }
+
+  const dispatchUrl = `https://api.github.com/repos/${repo}/actions/workflows/render.yml/dispatches`;
+  const dispatchBody = {
+    ref: "master",
+    inputs: {
+      jobId: job.id,
+      inputProps: inputPropsJson,
+      outKey,
+      bucketName,
+      region,
     },
-    body: JSON.stringify({
-      ref: "main",
-      inputs: {
-        jobId: job.id,
-        inputProps: JSON.stringify(inputProps),
-        outKey,
-        bucketName,
-        region,
-      },
-    }),
-  });
+  };
 
-  if (!response.ok) {
-    const errorBody = await response.text();
+  console.log("[GitHub Render] Dispatching to:", dispatchUrl);
+  console.log("[GitHub Render] Token prefix:", token.substring(0, 10) + "...");
+  console.log("[GitHub Render] Repo:", repo);
+  console.log("[GitHub Render] Ref: main");
+  console.log("[GitHub Render] inputProps length:", inputPropsJson.length, "chars");
+
+  let response: Response;
+  try {
+    response = await fetch(dispatchUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(dispatchBody),
+    });
+  } catch (fetchError) {
+    const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+    console.error("[GitHub Render] Fetch error (network):", msg);
     throw new AppError(
-      "github_dispatch_failed",
-      errorBody || `GitHub API failed with status ${response.status}`,
-      "Failed to trigger GitHub Actions render.",
+      "github_dispatch_network_error",
+      msg,
+      `Network error connecting to GitHub API: ${msg}`,
       502
     );
   }
+
+  console.log("[GitHub Render] Response status:", response.status, response.statusText);
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    console.error("[GitHub Render] Error response body:", errorBody);
+    console.error("[GitHub Render] Status:", response.status);
+
+    // Provide specific user-facing messages based on status code
+    let userMessage = "Failed to trigger GitHub Actions render.";
+    if (response.status === 404) {
+      userMessage = `GitHub returned 404. Either the repo "${repo}" doesn't exist, the workflow file .github/workflows/render.yml is not on the "main" branch, or your token doesn't have access to this repo.`;
+    } else if (response.status === 403) {
+      userMessage = `GitHub returned 403 Forbidden. Your token likely lacks "Actions: Write" permission. Regenerate it with the correct scopes.`;
+    } else if (response.status === 401) {
+      userMessage = `GitHub returned 401 Unauthorized. Your token is invalid or expired. Generate a new one.`;
+    } else if (response.status === 422) {
+      userMessage = `GitHub returned 422. The workflow inputs may be too large (${inputPropsJson.length} chars) or the "main" branch doesn't exist. Error: ${errorBody}`;
+    } else {
+      userMessage = `GitHub API returned ${response.status}: ${errorBody.slice(0, 300)}`;
+    }
+
+    throw new AppError(
+      "github_dispatch_failed",
+      errorBody || `GitHub API failed with status ${response.status}`,
+      userMessage,
+      502
+    );
+  }
+
+  console.log("[GitHub Render] ✅ Dispatch successful for job:", job.id);
 
   return {
     renderId: `github-${job.id}-${Date.now()}`,

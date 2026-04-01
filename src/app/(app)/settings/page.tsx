@@ -13,6 +13,8 @@ type ColabHealth = {
   error?: string;
 };
 
+
+
 export default function SettingsPage() {
   const { data: session } = useSession();
   const {
@@ -30,12 +32,15 @@ export default function SettingsPage() {
   const [colabHealth, setColabHealth] = useState<ColabHealth | null>(null);
   const [testingColab, setTestingColab] = useState(false);
 
+
   const readyForFish = Boolean((settings.hasFishApiKey || settings.fishApiKey) && settings.fishModelA && settings.fishModelB);
   const readyForHf = Boolean((settings.hasHfToken || settings.hfToken) && settings.hfModelA && settings.hfModelB);
   const readyForElevenLabs = Boolean((settings.hasElevenLabsApiKey || settings.elevenLabsApiKey) && settings.elevenLabsVoiceA && settings.elevenLabsVoiceB);
   const readyForPolly = Boolean(settings.pollyVoiceA && settings.pollyVoiceB);
   const readyForTTS = settings.ttsProvider === "huggingface" ? readyForHf : settings.ttsProvider === "elevenlabs" ? readyForElevenLabs : settings.ttsProvider === "polly" ? readyForPolly : readyForFish;
   const readyForColab = Boolean(settings.colabUrl);
+  // GitHub Actions uses .env values (GITHUB_TOKEN + GITHUB_REPO), no per-user config needed
+  const readyForGithub = settings.renderProvider === "github" ? renderHealth.ok : true;
   const readyForLlm = Boolean(settings.llmModel && (settings.hasLlmApiKey || settings.llmApiKey));
 
   const isRenderHealthy = settings.renderProvider === "colab" ? readyForColab : settings.renderProvider === "github" ? renderHealth.ok : renderHealth.ok;
@@ -84,6 +89,8 @@ export default function SettingsPage() {
       setTestingColab(false);
     }
   };
+
+
 
   if (isLoadingSettings) {
     return (
@@ -141,29 +148,29 @@ export default function SettingsPage() {
           <div className="field-grid-settings">
             <label className="field-block">
               <span>LLM Base URL</span>
-              <input 
-                value={settings.llmBaseUrl} 
-                onChange={(e) => setSettings((c) => ({ ...c, llmBaseUrl: e.target.value }))} 
+              <input
+                value={settings.llmBaseUrl}
+                onChange={(e) => setSettings((c) => ({ ...c, llmBaseUrl: e.target.value }))}
                 placeholder="https://generativelanguage.googleapis.com/v1beta"
               />
             </label>
             <label className="field-block">
               <span>LLM Model</span>
-              <input 
-                value={settings.llmModel} 
-                onChange={(e) => setSettings((c) => ({ ...c, llmModel: e.target.value }))} 
-                placeholder="gemini-1.5-flash"
+              <input
+                value={settings.llmModel}
+                onChange={(e) => setSettings((c) => ({ ...c, llmModel: e.target.value }))}
+                placeholder="gemini-flash-latest"
               />
             </label>
             <label className="field-block full-width">
-              <span style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>LLM API Key {settings.hasLlmApiKey ? "(Stored)" : ""}</span>
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{color: 'var(--accent)', textDecoration: 'none'}}>Get Key →</a>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Get Key →</a>
               </span>
-              <input 
-                type="text" 
-                value={settings.llmApiKey} 
-                onChange={(e) => setSettings((c) => ({ ...c, llmApiKey: e.target.value }))} 
+              <input
+                type="text"
+                value={settings.llmApiKey}
+                onChange={(e) => setSettings((c) => ({ ...c, llmApiKey: e.target.value }))}
                 placeholder="sk-..."
               />
             </label>
@@ -181,8 +188,8 @@ export default function SettingsPage() {
           <div className="field-grid-settings">
             <label className="field-block full-width">
               <span>TTS Provider</span>
-              <select 
-                value={settings.ttsProvider} 
+              <select
+                value={settings.ttsProvider}
                 onChange={(e) => setSettings((c) => ({ ...c, ttsProvider: e.target.value as "fish" | "huggingface" | "elevenlabs" | "polly" }))}
               >
                 <option value="fish">Fish.audio (Recommended)</option>
@@ -196,29 +203,29 @@ export default function SettingsPage() {
               <>
                 <label className="field-block">
                   <span>Fish Model A</span>
-                  <input 
-                    value={settings.fishModelA} 
-                    onChange={(e) => setSettings((c) => ({ ...c, fishModelA: e.target.value }))} 
+                  <input
+                    value={settings.fishModelA}
+                    onChange={(e) => setSettings((c) => ({ ...c, fishModelA: e.target.value }))}
                     placeholder="model-id"
                   />
                 </label>
                 <label className="field-block">
                   <span>Fish Model B</span>
-                  <input 
-                    value={settings.fishModelB} 
-                    onChange={(e) => setSettings((c) => ({ ...c, fishModelB: e.target.value }))} 
+                  <input
+                    value={settings.fishModelB}
+                    onChange={(e) => setSettings((c) => ({ ...c, fishModelB: e.target.value }))}
                     placeholder="model-id"
                   />
                 </label>
                 <label className="field-block full-width">
-                  <span style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>Fish API Key {settings.hasFishApiKey ? "(Stored)" : ""}</span>
-                    <a href="https://fish.audio/" target="_blank" rel="noreferrer" style={{color: 'var(--accent)', textDecoration: 'none'}}>Get Key →</a>
+                    <a href="https://fish.audio/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Get Key →</a>
                   </span>
-                  <input 
-                    type="text" 
-                    value={settings.fishApiKey} 
-                    onChange={(e) => setSettings((c) => ({ ...c, fishApiKey: e.target.value }))} 
+                  <input
+                    type="text"
+                    value={settings.fishApiKey}
+                    onChange={(e) => setSettings((c) => ({ ...c, fishApiKey: e.target.value }))}
                     placeholder="fish_..."
                   />
                 </label>
@@ -229,29 +236,29 @@ export default function SettingsPage() {
               <>
                 <label className="field-block">
                   <span>Eleven Labs Voice A ID</span>
-                  <input 
-                    value={settings.elevenLabsVoiceA} 
-                    onChange={(e) => setSettings((c) => ({ ...c, elevenLabsVoiceA: e.target.value }))} 
+                  <input
+                    value={settings.elevenLabsVoiceA}
+                    onChange={(e) => setSettings((c) => ({ ...c, elevenLabsVoiceA: e.target.value }))}
                     placeholder="Voice ID"
                   />
                 </label>
                 <label className="field-block">
                   <span>Eleven Labs Voice B ID</span>
-                  <input 
-                    value={settings.elevenLabsVoiceB} 
-                    onChange={(e) => setSettings((c) => ({ ...c, elevenLabsVoiceB: e.target.value }))} 
+                  <input
+                    value={settings.elevenLabsVoiceB}
+                    onChange={(e) => setSettings((c) => ({ ...c, elevenLabsVoiceB: e.target.value }))}
                     placeholder="Voice ID"
                   />
                 </label>
                 <label className="field-block full-width">
-                  <span style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>Eleven Labs API Key {settings.hasElevenLabsApiKey ? "(Stored)" : ""}</span>
-                    <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noreferrer" style={{color: 'var(--accent)', textDecoration: 'none'}}>Get Key →</a>
+                    <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Get Key →</a>
                   </span>
-                  <input 
-                    type="text" 
-                    value={settings.elevenLabsApiKey} 
-                    onChange={(e) => setSettings((c) => ({ ...c, elevenLabsApiKey: e.target.value }))} 
+                  <input
+                    type="text"
+                    value={settings.elevenLabsApiKey}
+                    onChange={(e) => setSettings((c) => ({ ...c, elevenLabsApiKey: e.target.value }))}
                     placeholder="sk_..."
                   />
                 </label>
@@ -290,29 +297,29 @@ export default function SettingsPage() {
               <>
                 <label className="field-block">
                   <span>HF Model A</span>
-                  <input 
-                    value={settings.hfModelA} 
-                    onChange={(e) => setSettings((c) => ({ ...c, hfModelA: e.target.value }))} 
+                  <input
+                    value={settings.hfModelA}
+                    onChange={(e) => setSettings((c) => ({ ...c, hfModelA: e.target.value }))}
                     placeholder="hexgrad/Kokoro-82M"
                   />
                 </label>
                 <label className="field-block">
                   <span>HF Model B</span>
-                  <input 
-                    value={settings.hfModelB} 
-                    onChange={(e) => setSettings((c) => ({ ...c, hfModelB: e.target.value }))} 
+                  <input
+                    value={settings.hfModelB}
+                    onChange={(e) => setSettings((c) => ({ ...c, hfModelB: e.target.value }))}
                     placeholder="hexgrad/Kokoro-82M"
                   />
                 </label>
                 <label className="field-block full-width">
-                  <span style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>Hugging Face Token {settings.hasHfToken ? "(Stored)" : ""}</span>
-                    <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" style={{color: 'var(--accent)', textDecoration: 'none'}}>Get Token →</a>
+                    <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Get Token →</a>
                   </span>
-                  <input 
-                    type="text" 
-                    value={settings.hfToken} 
-                    onChange={(e) => setSettings((c) => ({ ...c, hfToken: e.target.value }))} 
+                  <input
+                    type="text"
+                    value={settings.hfToken}
+                    onChange={(e) => setSettings((c) => ({ ...c, hfToken: e.target.value }))}
                     placeholder="hf_..."
                   />
                 </label>
@@ -355,15 +362,15 @@ export default function SettingsPage() {
             <label className="field-block full-width">
               <span>Colab Tunnel URL</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <input 
-                  type="text" 
-                  value={settings.colabUrl} 
-                  onChange={(e) => setSettings((c) => ({ ...c, colabUrl: e.target.value }))} 
+                <input
+                  type="text"
+                  value={settings.colabUrl}
+                  onChange={(e) => setSettings((c) => ({ ...c, colabUrl: e.target.value }))}
                   placeholder="https://xxxx.trycloudflare.com"
                   style={{ flex: 1 }}
                 />
-                <button 
-                  className="secondary-button" 
+                <button
+                  className="secondary-button"
                   onClick={testColabConnection}
                   disabled={!settings.colabUrl || testingColab}
                 >
@@ -375,22 +382,22 @@ export default function SettingsPage() {
 
           {/* Help Accordion */}
           <div className="colab-help-section">
-            <button 
+            <button
               className="colab-help-toggle"
               onClick={() => setShowColabHelp(!showColabHelp)}
             >
               <span>📖 How to get your Colab URL</span>
               <span className="toggle-arrow">{showColabHelp ? "▲" : "▼"}</span>
             </button>
-            
+
             {showColabHelp && (
               <div className="colab-help-content">
                 <ol className="colab-steps">
                   <li>
                     <strong>Open the Colab notebook</strong>
-                    <a 
-                      href="https://colab.research.google.com/drive/1y09k-TWpzpIyTtmMiNqJVtWQNqsznwP2" 
-                      target="_blank" 
+                    <a
+                      href="https://colab.research.google.com/drive/1y09k-TWpzpIyTtmMiNqJVtWQNqsznwP2"
+                      target="_blank"
                       rel="noreferrer"
                       className="colab-link"
                     >
@@ -437,7 +444,7 @@ export default function SettingsPage() {
             <strong>Render Engine</strong>
             <p className="panel-desc">Choose how your videos are rendered.</p>
           </div>
-          
+
           <div className="settings-grid">
             <div className={`status-tile ${readyForLlm ? 'good' : ''}`}>
               <strong>LLM Engine</strong>
@@ -451,12 +458,18 @@ export default function SettingsPage() {
               <strong>Colab Server</strong>
               <span>{readyForColab ? "Ready" : "Not set"}</span>
             </div>
+            <div className={`status-tile ${settings.renderProvider === 'github' ? (renderHealth.ok ? 'good' : '') : (readyForGithub ? 'good' : '')}`}>
+              <strong>GitHub Actions</strong>
+              <span>{settings.renderProvider === 'github' ? (renderHealth.ok ? 'Connected' : 'Check .env') : 'Available'}</span>
+            </div>
             <div className={`status-tile ${isRenderHealthy ? 'good' : ''}`}>
               <strong>Render ({settings.renderProvider})</strong>
               <span>
-                {settings.renderProvider === "colab" 
-                  ? (readyForColab ? "Ready" : "Missing URL") 
-                  : (renderHealth.ok ? "Healthy" : "Check Config")}
+                {settings.renderProvider === "colab"
+                  ? (readyForColab ? "Ready" : "Missing URL")
+                  : settings.renderProvider === "github"
+                    ? (renderHealth.ok ? "Ready" : "Check .env config")
+                    : (renderHealth.ok ? "Healthy" : "Check Config")}
               </span>
             </div>
           </div>
@@ -464,13 +477,13 @@ export default function SettingsPage() {
           <div className="field-grid-settings" style={{ marginTop: '20px' }}>
             <label className="field-block full-width">
               <span>Render Provider</span>
-              <select 
-                value={settings.renderProvider} 
+              <select
+                value={settings.renderProvider}
                 onChange={(e) => setSettings((c) => ({ ...c, renderProvider: e.target.value as "lambda" | "colab" | "github" }))}
               >
                 <option value="lambda">AWS Lambda (Cloud - Recommended)</option>
                 <option value="colab">Colab Server (Local)</option>
-                <option value="github">GitHub Actions (BYOC)</option>
+                <option value="github">GitHub Actions (Free compute via .env)</option>
               </select>
             </label>
           </div>
@@ -489,10 +502,10 @@ export default function SettingsPage() {
             <div className="account-section">
               <div className="account-user">
                 {session.user?.image && (
-                  <img 
-                    src={session.user.image} 
-                    alt={session.user.name || "User"} 
-                    className="account-avatar" 
+                  <img
+                    src={session.user.image}
+                    alt={session.user.name || "User"}
+                    className="account-avatar"
                   />
                 )}
                 <div className="account-info">
@@ -500,8 +513,8 @@ export default function SettingsPage() {
                   <span>{session.user?.email}</span>
                 </div>
               </div>
-              <button 
-                className="secondary-button" 
+              <button
+                className="secondary-button"
                 onClick={() => signOut({ callbackUrl: "/" })}
                 style={{ marginTop: '16px' }}
               >
@@ -511,8 +524,8 @@ export default function SettingsPage() {
           ) : (
             <div className="account-section">
               <p>You are not signed in.</p>
-              <button 
-                className="primary-button" 
+              <button
+                className="primary-button"
                 onClick={() => signIn("google", { callbackUrl: "/" })}
                 style={{ marginTop: '12px' }}
               >

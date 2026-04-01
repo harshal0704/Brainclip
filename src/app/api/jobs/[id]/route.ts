@@ -9,6 +9,7 @@ import { buildRenderInputProps, getSpeakerConfigsFromVoiceMap } from "@/lib/jobs
 import { getLambdaRenderProgress, getRenderFailureMessage, triggerLambdaRender, triggerGithubRender, triggerColabRender } from "@/lib/render";
 import { copyObject, headObject } from "@/lib/s3";
 import { requireOwnedJob } from "@/lib/session";
+import { decryptSecret } from "@/lib/crypto";
 
 const getProgressWithRetry = async (
   renderId: string,
@@ -240,7 +241,6 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       });
 
       try {
-        const hasGithubToken = !!process.env.GITHUB_TOKEN;
         let renderId = "";
         let bucketName = "";
         let stage = "Rendering video";
@@ -250,8 +250,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           renderId = render.renderId;
           bucketName = render.bucketName;
           stage = "Rendering video on Colab server";
-        } else if (user.renderProvider === "github" && user.s3Bucket && hasGithubToken) {
-          const render = await triggerGithubRender(nextJob, inputProps, user.s3Bucket, user.s3Region || "us-east-1");
+        } else if (user.renderProvider === "github" && user.s3Bucket) {
+          const githubToken = user.githubToken ? (decryptSecret(user.githubToken) ?? "") : "";
+          const githubRepo = user.githubRepo ?? "";
+          // triggerGithubRender will fall back to .env values if these are empty
+          const render = await triggerGithubRender(nextJob, inputProps, user.s3Bucket!, user.s3Region || "us-east-1", githubToken, githubRepo);
           renderId = render.renderId;
           bucketName = render.bucketName;
           stage = "Rendering video with GitHub Actions";
@@ -306,8 +309,118 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
               .where(eq(jobs.id, nextJob.id))
               .returning();
             nextJob = updatedJob;
+          } else if (isGithub) {
+            // Query actual GitHub Actions run status for real progress
+            // Fall back to .env values if user hasn't configured their own
+            const githubToken = (user.githubToken ? decryptSecret(user.githubToken) : null) || process.env.GITHUB_TOKEN || "";
+            const githubRepo = user.githubRepo || process.env.GITHUB_REPO || "";
+            let ghStage = "Rendering video with GitHub Actions";
+            let ghProgress = nextJob.progressPct;
+
+            try {
+              const runsRes = await fetch(
+                `https://api.github.com/repos/${githubRepo}/actions/workflows/render.yml/runs?per_page=3&status=in_progress`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${githubToken}`,
+                    Accept: "application/vnd.github.v3+json",
+                  },
+                  signal: AbortSignal.timeout(8000),
+                }
+              );
+
+              if (runsRes.ok) {
+                const runsData = await runsRes.json();
+                const runs = runsData.workflow_runs ?? [];
+                // Find the run for this job (most recent matching run)
+                const matchingRun = runs[0];
+
+                if (matchingRun) {
+                  const runStatus = matchingRun.status; // queued, in_progress, completed
+                  const conclusion = matchingRun.conclusion; // success, failure, cancelled, null
+
+                  if (runStatus === "completed" && conclusion === "success") {
+                    // Render done but S3 upload might be propagating, check again soon
+                    ghStage = "GitHub Action complete — waiting for S3 upload";
+                    ghProgress = 98;
+                  } else if (runStatus === "completed" && conclusion === "failure") {
+                    const [failedJob] = await db
+                      .update(jobs)
+                      .set({
+                        status: "failed",
+                        stage: "GitHub Actions workflow failed",
+                        errorMessage: `Workflow run failed (conclusion: ${conclusion}). Check your GitHub Actions logs at: ${matchingRun.html_url}`,
+                        updatedAt: new Date(),
+                      })
+                      .where(eq(jobs.id, nextJob.id))
+                      .returning();
+                    nextJob = failedJob;
+                    // Return early — no further progress update needed
+                    return NextResponse.json({
+                      job: nextJob,
+                      jobId: nextJob.id,
+                      status: nextJob.status,
+                      progress: nextJob.progressPct,
+                      stage: nextJob.stage,
+                      error: nextJob.errorMessage,
+                    });
+                  } else if (runStatus === "queued") {
+                    ghStage = "Queued — waiting for GitHub runner";
+                    ghProgress = Math.max(ghProgress, 72);
+                  } else if (runStatus === "in_progress") {
+                    // Try to get the current step from jobs endpoint
+                    try {
+                      const jobsRes = await fetch(matchingRun.jobs_url, {
+                        headers: {
+                          Authorization: `Bearer ${githubToken}`,
+                          Accept: "application/vnd.github.v3+json",
+                        },
+                        signal: AbortSignal.timeout(5000),
+                      });
+                      if (jobsRes.ok) {
+                        const jobsData = await jobsRes.json();
+                        const runJob = jobsData.jobs?.[0];
+                        if (runJob?.steps) {
+                          const completedSteps = runJob.steps.filter((s: any) => s.status === "completed").length;
+                          const totalSteps = runJob.steps.length;
+                          const currentStep = runJob.steps.find((s: any) => s.status === "in_progress");
+                          const stepName = currentStep?.name ?? "Processing";
+                          // Map real steps to progress: 70 (start) → 97 (about to finish)
+                          ghProgress = Math.max(ghProgress, Math.min(97, 70 + Math.round((completedSteps / totalSteps) * 27)));
+                          ghStage = `GitHub Actions: ${stepName} (${completedSteps}/${totalSteps} steps)`;
+                        }
+                      }
+                    } catch {
+                      // Fallback — just show generic in_progress
+                      ghStage = "Rendering on GitHub Actions runner";
+                      ghProgress = Math.min(95, ghProgress + 1);
+                    }
+                  }
+                } else {
+                  // No in_progress run found — check completed runs
+                  ghStage = "Waiting for GitHub runner to pick up the job";
+                  ghProgress = Math.min(95, ghProgress + 1);
+                }
+              }
+            } catch {
+              // GitHub API unreachable — fall back to gentle progress bump
+              ghProgress = Math.min(95, ghProgress + 1);
+            }
+
+            if (ghProgress !== nextJob.progressPct || ghStage !== nextJob.stage) {
+              const [updatedJob] = await db
+                .update(jobs)
+                .set({
+                  progressPct: ghProgress,
+                  stage: ghStage,
+                  updatedAt: new Date(),
+                })
+                .where(eq(jobs.id, nextJob.id))
+                .returning();
+              nextJob = updatedJob;
+            }
           } else {
-            // Still rendering, gently bump progress to show activity
+            // Colab or no GitHub token — gentle progress bump
             const newProgress = Math.min(95, nextJob.progressPct + 1);
             if (newProgress !== nextJob.progressPct) {
               const [updatedJob] = await db

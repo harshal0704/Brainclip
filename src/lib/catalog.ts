@@ -2,6 +2,8 @@ export const duoPresets = [
   {
     id: "expert-vs-beginner",
     label: "Expert vs Beginner",
+    icon: "🎓",
+    category: "Educational",
     hook: "Great for explainers that start with tension and end with clarity.",
     speakerA: "Sharp operator who simplifies complex ideas without sounding robotic.",
     speakerB: "Curious beginner who asks smart questions the audience is already thinking.",
@@ -10,6 +12,8 @@ export const duoPresets = [
   {
     id: "debate-room",
     label: "Debate Room",
+    icon: "⚔️",
+    category: "Opinion",
     hook: "High-retention format for opinionated topics and myth-busting clips.",
     speakerA: "Confident contrarian with punchy one-liners and bold hooks.",
     speakerB: "Measured realist who grounds the conversation with credible context.",
@@ -18,10 +22,62 @@ export const duoPresets = [
   {
     id: "host-guest",
     label: "Host and Guest",
+    icon: "🎙️",
+    category: "Interview",
     hook: "Best for interview-style shorts with memorable takeaways.",
     speakerA: "Warm host who guides the structure and sets up revealing prompts.",
     speakerB: "Insightful guest with story-driven answers and crisp analogies.",
     tone: "interview",
+  },
+  {
+    id: "storytime",
+    label: "Storytime Duo",
+    icon: "📖",
+    category: "Narrative",
+    hook: "Perfect for dramatic recaps, lore breakdowns, and binge-worthy story arcs.",
+    speakerA: "Vivid narrator who paints scenes with suspense and emotional beats.",
+    speakerB: "Reactive commentator who voices audience reactions and adds context twists.",
+    tone: "storytelling",
+  },
+  {
+    id: "rapid-fire",
+    label: "Rapid Fire",
+    icon: "⚡",
+    category: "Facts",
+    hook: "Ultra-fast pacing for listicles, rankings, and did-you-know compilations.",
+    speakerA: "Machine-gun fact-dropper with punchy delivery and zero filler words.",
+    speakerB: "Stunned reactor who amplifies shock value with genuine disbelief.",
+    tone: "rapid",
+  },
+  {
+    id: "conspiracy-corner",
+    label: "Conspiracy Corner",
+    icon: "🔍",
+    category: "Mystery",
+    hook: "Deep-dive format for mysteries, unsolved cases, and alternative theories.",
+    speakerA: "Obsessive investigator who connects dots and drops eerie clues.",
+    speakerB: "Skeptical analyst who pushes back with logic but stays hooked.",
+    tone: "mystery",
+  },
+  {
+    id: "coach-player",
+    label: "Coach & Player",
+    icon: "🏆",
+    category: "Motivation",
+    hook: "Motivational format for self-improvement, fitness, and accountability content.",
+    speakerA: "Tough-love coach who delivers hard truths with inspirational fire.",
+    speakerB: "Relatable player who voices internal doubts and celebrates breakthroughs.",
+    tone: "motivational",
+  },
+  {
+    id: "roast-battle",
+    label: "Roast Battle",
+    icon: "🔥",
+    category: "Comedy",
+    hook: "Satirical format for hot takes, pop culture roasts, and comedic commentary.",
+    speakerA: "Quick-witted roaster with surgical one-liners and comedic timing.",
+    speakerB: "Self-aware target who fires back with unexpected comebacks and charm.",
+    tone: "comedy",
   },
 ];
 
@@ -248,3 +304,20 @@ export const subtitlePresetCatalog = [
     note: "Punchy contour captions for creator-style reels.",
   },
 ];
+
+export const stickerPresetCatalog = [
+  { id: "avatar-1", label: "Cool Headphones", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/headphones.png", emoji: "🎧" },
+  { id: "avatar-2", label: "Lightning Bolt", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/lightning.png", emoji: "⚡" },
+  { id: "avatar-3", label: "Fire Flame", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/fire.png", emoji: "🔥" },
+  { id: "avatar-4", label: "Star", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/star.png", emoji: "⭐" },
+  { id: "avatar-5", label: "Rocket", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/rocket.png", emoji: "🚀" },
+  { id: "avatar-6", label: "Brain", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/brain.png", emoji: "🧠" },
+  { id: "avatar-7", label: "Crown", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/crown.png", emoji: "👑" },
+  { id: "avatar-8", label: "Diamond", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/diamond.png", emoji: "💎" },
+  { id: "avatar-9", label: "Microphone", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/mic.png", emoji: "🎤" },
+  { id: "avatar-10", label: "Thumbs Up", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/thumbsup.png", emoji: "👍" },
+  { id: "avatar-11", label: "Speech Bubble", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/speech.png", emoji: "💬" },
+  { id: "avatar-12", label: "Glasses", url: "https://brainclips-videos.s3.us-east-1.amazonaws.com/stickers/presets/glasses.png", emoji: "😎" },
+];
+
+export type StickerPreset = typeof stickerPresetCatalog[number];

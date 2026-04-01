@@ -27,6 +27,8 @@ const settingsSchema = z.object({
   pollyVoiceA: z.string().optional(),
   pollyVoiceB: z.string().optional(),
   colabUrl: z.string().url().optional().or(z.literal("")),
+  githubToken: z.string().optional(),
+  githubRepo: z.string().optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -48,14 +50,17 @@ export async function GET(request: NextRequest) {
         pollyVoiceA: user.pollyVoiceA ?? "Matthew",
         pollyVoiceB: user.pollyVoiceB ?? "Joanna",
         colabUrl: user.colabUrl ?? "",
+        githubRepo: user.githubRepo ?? "",
         hasLlmApiKey: Boolean(decryptSecret(user.llmApiKey)),
         hasFishApiKey: Boolean(decryptSecret(user.fishApiKey)),
         hasHfToken: Boolean(decryptSecret(user.hfToken)),
         hasElevenLabsApiKey: Boolean(decryptSecret(user.elevenLabsApiKey)),
+        hasGithubToken: Boolean(decryptSecret(user.githubToken)),
         llmApiKey: user.llmApiKey ? decryptSecret(user.llmApiKey) : "",
         fishApiKey: user.fishApiKey ? decryptSecret(user.fishApiKey) : "",
         hfToken: user.hfToken ? decryptSecret(user.hfToken) : "",
         elevenLabsApiKey: user.elevenLabsApiKey ? decryptSecret(user.elevenLabsApiKey) : "",
+        githubToken: user.githubToken ? decryptSecret(user.githubToken) : "",
       },
     });
   } catch (error) {
@@ -91,6 +96,8 @@ export async function PATCH(request: NextRequest) {
         pollyVoiceA: body.pollyVoiceA?.trim() ? body.pollyVoiceA : (user.pollyVoiceA ?? "Matthew"),
         pollyVoiceB: body.pollyVoiceB?.trim() ? body.pollyVoiceB : (user.pollyVoiceB ?? "Joanna"),
         colabUrl: body.colabUrl?.trim() ? body.colabUrl : null,
+        githubToken: body.githubToken?.trim() ? encryptSecret(body.githubToken.trim()) : user.githubToken,
+        githubRepo: body.githubRepo?.trim() ? body.githubRepo : null,
         updatedAt: new Date(),
       })
       .where(eq(users.id, user.id))
@@ -111,14 +118,17 @@ export async function PATCH(request: NextRequest) {
         pollyVoiceA: updatedUser.pollyVoiceA ?? "Matthew",
         pollyVoiceB: updatedUser.pollyVoiceB ?? "Joanna",
         colabUrl: updatedUser.colabUrl ?? "",
+        githubRepo: updatedUser.githubRepo ?? "",
         hasLlmApiKey: Boolean(updatedUser.llmApiKey),
         hasFishApiKey: Boolean(updatedUser.fishApiKey),
         hasHfToken: Boolean(updatedUser.hfToken),
         hasElevenLabsApiKey: Boolean(updatedUser.elevenLabsApiKey),
+        hasGithubToken: Boolean(updatedUser.githubToken),
         llmApiKey: updatedUser.llmApiKey ? decryptSecret(updatedUser.llmApiKey) : "",
         fishApiKey: updatedUser.fishApiKey ? decryptSecret(updatedUser.fishApiKey) : "",
         hfToken: updatedUser.hfToken ? decryptSecret(updatedUser.hfToken) : "",
         elevenLabsApiKey: updatedUser.elevenLabsApiKey ? decryptSecret(updatedUser.elevenLabsApiKey) : "",
+        githubToken: updatedUser.githubToken ? decryptSecret(updatedUser.githubToken) : "",
       },
     });
   } catch (error) {

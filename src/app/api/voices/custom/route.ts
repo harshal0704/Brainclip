@@ -33,13 +33,18 @@ export async function GET(request: NextRequest) {
     if (includeUrls && user.s3Bucket) {
       voicesWithUrls = await Promise.all(
         voices.map(async (voice) => {
-          const urls = await generateVoiceDownloadUrls({
-            bucket: user.s3Bucket!,
-            referenceKey: voice.referenceAudioKey,
-            previewKey: voice.previewAudioKey,
-            region: user.s3Region,
-          });
-          return { ...voice, urls };
+          try {
+            const urls = await generateVoiceDownloadUrls({
+              bucket: user.s3Bucket!,
+              referenceKey: voice.referenceAudioKey,
+              previewKey: voice.previewAudioKey,
+              region: user.s3Region,
+            });
+            return { ...voice, urls };
+          } catch (err) {
+            console.error(`[Voices] Failed to generate URLs for voice ${voice.id}:`, err instanceof Error ? err.message : String(err));
+            return { ...voice, urls: null };
+          }
         }),
       );
     }

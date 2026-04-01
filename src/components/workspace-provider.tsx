@@ -40,10 +40,13 @@ export type SettingsState = {
   pollyVoiceA: string;
   pollyVoiceB: string;
   colabUrl: string;
+  githubToken: string;
+  githubRepo: string;
   hasLlmApiKey?: boolean;
   hasFishApiKey?: boolean;
   hasHfToken?: boolean;
   hasElevenLabsApiKey?: boolean;
+  hasGithubToken?: boolean;
 };
 
 export type ScriptLine = {
@@ -76,6 +79,8 @@ const defaultSettings: SettingsState = {
   pollyVoiceA: "Matthew",
   pollyVoiceB: "Joanna",
   colabUrl: "",
+  githubToken: "",
+  githubRepo: "",
 };
 
 const defaultDuo = duoPresets[0];
@@ -94,6 +99,7 @@ export const buildDefaultEditorForm = () => ({
   stickerUrlA: "",
   stickerUrlB: "",
   backgroundUrl: "",
+  backgroundGameId: "",
   bgDimOpacity: 0.34,
   showProgressBar: true,
   assetPackId: assetPackCatalog[0]?.id ?? "",
@@ -163,6 +169,7 @@ type WorkspaceContextType = {
   handleUploadSticker: (speaker: "A" | "B", file: File) => Promise<void>;
   applyDuoPreset: (duoId: string) => void;
   handleVoiceSelect: (voice: CustomVoice, speaker: "A" | "B") => void;
+  refreshJobUrl: (jobId: string) => Promise<void>;
 };
 
 const WorkspaceContext = createContext<WorkspaceContextType | null>(null);
@@ -208,7 +215,7 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
       const response = await fetch("/api/settings");
       const data = await response.json();
       if (response.ok) {
-        setSettings((current) => ({ ...current, ...data.settings, llmApiKey: data.settings.llmApiKey || "", fishApiKey: data.settings.fishApiKey || "", hfToken: data.settings.hfToken || "", elevenLabsApiKey: data.settings.elevenLabsApiKey || "", pollyVoiceA: data.settings.pollyVoiceA || "Matthew", pollyVoiceB: data.settings.pollyVoiceB || "Joanna" }));
+        setSettings((current) => ({ ...current, ...data.settings, llmApiKey: data.settings.llmApiKey || "", fishApiKey: data.settings.fishApiKey || "", hfToken: data.settings.hfToken || "", elevenLabsApiKey: data.settings.elevenLabsApiKey || "", pollyVoiceA: data.settings.pollyVoiceA || "Matthew", pollyVoiceB: data.settings.pollyVoiceB || "Joanna", githubToken: data.settings.githubToken || "", githubRepo: data.settings.githubRepo || "" }));
       }
     } finally {
       setIsLoadingSettings(false);
@@ -246,7 +253,13 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
       }
       
       if (data.provider === "github") {
-        setRenderHealth({ ok: true, note: data.note });
+        if (data.needsConfig) {
+          setRenderHealth({ ok: false, note: data.note });
+        } else if (data.ok) {
+          setRenderHealth({ ok: true, note: data.note });
+        } else {
+          setRenderHealth({ ok: false, note: data.note || "GitHub connection failed." });
+        }
       } else {
         setRenderHealth({ ok: true, note: `${data.functionName} ready in AWS Lambda.` });
       }
@@ -260,11 +273,21 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
     }
   }, [settings.renderProvider]);
 
+  // Load settings and jobs only once when authenticated
+  const hasInitializedRef = useRef(false);
   useEffect(() => {
-    if (status === "authenticated") {
+    if (status === "authenticated" && !hasInitializedRef.current) {
+      hasInitializedRef.current = true;
       void Promise.all([loadSettings(), loadJobs(), loadRenderHealth()]);
     }
-  }, [loadJobs, loadRenderHealth, loadSettings, status]);
+  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-check render health whenever the user changes the provider dropdown
+  useEffect(() => {
+    if (status === "authenticated" && hasInitializedRef.current) {
+      void loadRenderHealth();
+    }
+  }, [settings.renderProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
     if (pollRef.current) {
@@ -393,6 +416,18 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
     }
   }, [loadJobs]);
 
+  const refreshJobUrl = useCallback(async (jobId: string) => {
+    try {
+      const resultResponse = await fetch(`/api/jobs/${jobId}/result`);
+      const resultData = await resultResponse.json();
+      if (resultResponse.ok) {
+        setJobResultUrl(resultData.url);
+      }
+    } catch {
+      console.error("[refreshJobUrl] Failed to fetch URL for job", jobId);
+    }
+  }, []);
+
   const saveSettings = useCallback(async () => {
     setSettingsMessage("Saving routing, voices, and model access...");
     const response = await fetch("/api/settings", {
@@ -407,7 +442,7 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
       return;
     }
 
-    setSettings((current) => ({ ...current, ...data.settings, llmApiKey: data.settings.llmApiKey || "", fishApiKey: data.settings.fishApiKey || "", hfToken: data.settings.hfToken || "" }));
+    setSettings((current) => ({ ...current, ...data.settings, llmApiKey: data.settings.llmApiKey || "", fishApiKey: data.settings.fishApiKey || "", hfToken: data.settings.hfToken || "", githubToken: data.settings.githubToken || "", githubRepo: data.settings.githubRepo || "" }));
     setSettingsMessage("Studio settings saved. Brainclip can now generate and route jobs.");
   }, [settings]);
 
@@ -464,7 +499,7 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
           },
         },
         subtitleStyleId: editorForm.subtitleStyle,
-        backgroundUrl: editorForm.backgroundUrl,
+        backgroundGameId: editorForm.backgroundGameId,
         resolution: editorForm.resolution,
         editConfig: {
           stickerAnim: editorForm.stickerAnim,
@@ -531,7 +566,7 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
           stickerAnim: editorForm.stickerAnim,
           stickerUrlA: editorForm.stickerUrlA,
           stickerUrlB: editorForm.stickerUrlB,
-          backgroundUrl: editorForm.backgroundUrl,
+          backgroundGameId: editorForm.backgroundGameId,
           bgDimOpacity: editorForm.bgDimOpacity,
           showProgressBar: editorForm.showProgressBar,
           assetPackId: editorForm.assetPackId,
@@ -568,17 +603,23 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
         body: JSON.stringify({ filename: file.name, contentType: file.type })
       });
       
-      if (!res.ok) throw new Error("Could not get upload URL");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Could not get upload URL (${res.status})`);
+      }
       
       const { uploadUrl, publicUrl } = await res.json();
       
       const uploadRes = await fetch(uploadUrl, {
         method: "PUT",
-        headers: { "content-type": file.type },
+        headers: { "Content-Type": file.type },
         body: file,
       });
 
-      if (!uploadRes.ok) throw new Error("Failed to upload file to S3");
+      if (!uploadRes.ok) {
+        const errorText = await uploadRes.text().catch(() => "");
+        throw new Error(`Failed to upload to S3 (${uploadRes.status}): ${errorText.slice(0, 200)}`);
+      }
 
       setEditorForm(current => ({
         ...current,
@@ -587,6 +628,7 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
       
       setEditorMessage(`Sticker for Speaker ${speaker} uploaded successfully.`);
     } catch (e: any) {
+      console.error("[Sticker Upload]", e);
       setEditorMessage(`Upload failed: ${e.message}`);
     }
   }, []);
@@ -703,6 +745,7 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
     handleUploadSticker,
     applyDuoPreset,
     handleVoiceSelect,
+    refreshJobUrl,
   };
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

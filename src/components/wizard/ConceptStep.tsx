@@ -1,6 +1,6 @@
 "use client";
 
-import { duoPresets, gameBackgroundCatalog, getRandomVideo } from "@/lib/catalog";
+import { duoPresets, gameBackgroundCatalog, stickerPresetCatalog } from "@/lib/catalog";
 import type { EditorForm } from "./types";
 
 interface ConceptStepProps {
@@ -24,6 +24,13 @@ export const ConceptStep = ({ form, onFormChange, onUploadSticker, message }: Co
     });
   };
 
+  const selectPresetSticker = (speaker: "A" | "B", url: string) => {
+    onFormChange({
+      ...form,
+      [speaker === "A" ? "stickerUrlA" : "stickerUrlB"]: url,
+    });
+  };
+
   return (
     <div className="concept-step">
       <section className="panel-block">
@@ -31,15 +38,36 @@ export const ConceptStep = ({ form, onFormChange, onUploadSticker, message }: Co
           <strong>Choose Format</strong>
           <span className="panel-hint">Select a duo pattern that fits your content style</span>
         </div>
-        <div className="selection-grid three duo-grid">
+        <div className="duo-format-grid">
           {duoPresets.map((preset) => (
             <button
               key={preset.id}
-              className={form.duoId === preset.id ? "selection-card active" : "selection-card"}
+              className={`duo-format-card ${form.duoId === preset.id ? "active" : ""}`}
               onClick={() => applyDuoPreset(preset.id)}
             >
-              <strong>{preset.label}</strong>
-              <span>{preset.hook}</span>
+              <div className="duo-format-icon">{preset.icon}</div>
+              <div className="duo-format-body">
+                <div className="duo-format-title-row">
+                  <strong>{preset.label}</strong>
+                  <span className="duo-format-category">{preset.category}</span>
+                </div>
+                <span className="duo-format-hook">{preset.hook}</span>
+              </div>
+              {form.duoId === preset.id && (
+                <div className="duo-format-personas">
+                  <div className="duo-format-persona">
+                    <span className="persona-badge speaker-a-badge">A</span>
+                    <span>{preset.speakerA}</span>
+                  </div>
+                  <div className="duo-format-persona">
+                    <span className="persona-badge speaker-b-badge">B</span>
+                    <span>{preset.speakerB}</span>
+                  </div>
+                </div>
+              )}
+              {form.duoId === preset.id && (
+                <div className="duo-format-check">✓</div>
+              )}
             </button>
           ))}
         </div>
@@ -89,13 +117,30 @@ export const ConceptStep = ({ form, onFormChange, onUploadSticker, message }: Co
               onChange={(e) => onFormChange({ ...form, speakerAPersona: e.target.value })}
               placeholder="e.g., Sharp operator who simplifies complex ideas..."
             />
-            {form.stickerUrlA && (
-              <div className="sticker-preview">
-                <img src={form.stickerUrlA} alt="Speaker A sticker" />
-                <span>✓ Custom sticker uploaded</span>
-              </div>
-            )}
           </label>
+
+          <div style={{ marginTop: '12px' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--muted)', display: 'block', marginBottom: '8px' }}>Or pick a preset sticker:</span>
+            <div className="sticker-preset-grid">
+              {stickerPresetCatalog.map((sticker) => (
+                <button
+                  key={sticker.id}
+                  className={`sticker-preset-card ${form.stickerUrlA === sticker.url ? 'active' : ''}`}
+                  onClick={() => selectPresetSticker("A", sticker.url)}
+                  title={sticker.label}
+                >
+                  <span className="sticker-preset-emoji">{sticker.emoji}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {form.stickerUrlA && (
+            <div className="sticker-preview">
+              <img src={form.stickerUrlA} alt="Speaker A sticker" />
+              <span>✓ Sticker selected</span>
+            </div>
+          )}
         </div>
 
         <div>
@@ -124,47 +169,54 @@ export const ConceptStep = ({ form, onFormChange, onUploadSticker, message }: Co
               onChange={(e) => onFormChange({ ...form, speakerBPersona: e.target.value })}
               placeholder="e.g., Curious beginner who asks smart questions..."
             />
-            {form.stickerUrlB && (
-              <div className="sticker-preview">
-                <img src={form.stickerUrlB} alt="Speaker B sticker" />
-                <span>✓ Custom sticker uploaded</span>
-              </div>
-            )}
           </label>
+
+          <div style={{ marginTop: '12px' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--muted)', display: 'block', marginBottom: '8px' }}>Or pick a preset sticker:</span>
+            <div className="sticker-preset-grid">
+              {stickerPresetCatalog.map((sticker) => (
+                <button
+                  key={sticker.id}
+                  className={`sticker-preset-card ${form.stickerUrlB === sticker.url ? 'active' : ''}`}
+                  onClick={() => selectPresetSticker("B", sticker.url)}
+                  title={sticker.label}
+                >
+                  <span className="sticker-preset-emoji">{sticker.emoji}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {form.stickerUrlB && (
+            <div className="sticker-preview">
+              <img src={form.stickerUrlB} alt="Speaker B sticker" />
+              <span>✓ Sticker selected</span>
+            </div>
+          )}
         </div>
       </section>
 
       <section className="panel-block">
         <div className="panel-intro">
           <strong>Background Video</strong>
-          <span className="panel-hint">Pick a game to use a random video background</span>
+          <span className="panel-hint">Pick a game — a random video will be used each render</span>
         </div>
         <div className="game-background-grid">
           {gameBackgroundCatalog.map((game) => (
             <button
               key={game.id}
-              className={`game-background-card ${form.backgroundUrl && form.backgroundUrl.includes(game.id) ? 'active' : ''}`}
+              className={`game-background-card ${form.backgroundGameId === game.id ? 'active' : ''}`}
               onClick={() => {
-                const videoUrl = getRandomVideo(game.id);
-                onFormChange({ ...form, backgroundUrl: videoUrl || '' });
+                onFormChange({ ...form, backgroundGameId: game.id, backgroundUrl: '' });
               }}
             >
               <strong>{game.label}</strong>
-              <span>{game.videos.length} clips</span>
             </button>
           ))}
         </div>
-        {form.backgroundUrl && (
-          <div className="selected-background">
-            <span className="bg-label">Selected:</span>
-            <span className="bg-url">{form.backgroundUrl.split('/').pop()}</span>
-            <button
-              type="button"
-              className="bg-clear-btn"
-              onClick={() => onFormChange({ ...form, backgroundUrl: '' })}
-            >
-              ×
-            </button>
+        {form.backgroundGameId && (
+          <div className="selected-game-hint">
+            <span>A random {gameBackgroundCatalog.find(g => g.id === form.backgroundGameId)?.label || 'video'} clip will be used when rendering</span>
           </div>
         )}
       </section>

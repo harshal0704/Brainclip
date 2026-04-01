@@ -9,6 +9,7 @@ import { AppError, toErrorResponse } from "@/lib/errors";
 import { buildJobPresignedOutputs, normalizeCreateJobInput } from "@/lib/jobs";
 import { requireUserFromRequest } from "@/lib/session";
 import { dispatchColabVoiceJob, dispatchElevenLabsVoiceJob, dispatchFishApiVoiceJob, dispatchHuggingFaceVoiceJob, dispatchPollyVoiceJob, resolvePresetRefUrl } from "@/lib/voice";
+import { getRandomVideo } from "@/lib/catalog";
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
           ...body.editConfig,
           topic: body.topic,
           duoId: body.duoId,
+          backgroundGameId: (body.editConfig as any).backgroundGameId ?? "",
         },
         subtitleStyleId: body.subtitleStyleId,
         backgroundUrl: body.backgroundUrl,

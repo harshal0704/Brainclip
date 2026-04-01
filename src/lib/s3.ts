@@ -6,6 +6,7 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   PutBucketAclCommand,
+  PutBucketCorsCommand,
   PutBucketLifecycleConfigurationCommand,
   PutBucketOwnershipControlsCommand,
   PutBucketVersioningCommand,
@@ -63,6 +64,23 @@ export const createUserBucket = async (userId: string, region = DEFAULT_REGION) 
       Bucket: bucketName,
       VersioningConfiguration: {
         Status: "Enabled",
+      },
+    }),
+  );
+
+  await client.send(
+    new PutBucketCorsCommand({
+      Bucket: bucketName,
+      CORSConfiguration: {
+        CORSRules: [
+          {
+            AllowedOrigins: ["*"],
+            AllowedMethods: ["GET", "PUT", "POST", "HEAD", "DELETE"],
+            AllowedHeaders: ["*"],
+            ExposeHeaders: ["ETag", "x-amz-request-id", "x-amz-id-2"],
+            MaxAgeSeconds: 3600,
+          },
+        ],
       },
     }),
   );
