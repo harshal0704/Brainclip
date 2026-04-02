@@ -126,14 +126,18 @@ export const subtitleStyleSchema = z.enum([
   "word-fade",
   "karaoke",
   "full-line",
+  "sentence-reveal",
   "typewriter",
   "pill",
+  "pill-word",
   "social-captions",
   "news-crawl",
   "lower-third",
   "popup",
   "glitch",
   "neon",
+  "cinematic-shadow",
+  "outline-bold",
 ]);
 
 export const stickerAnimSchema = z.enum(["bounce", "slide", "float", "pulse", "shake", "static", "spin"]);
@@ -165,7 +169,7 @@ export const subtitlePositionSchema = z.enum(["top", "middle", "bottom", "custom
 
 export const editConfigSchema = z.object({
   // Sticker settings
-  stickerAnim: stickerAnimSchema,
+  stickerAnim: stickerAnimSchema.default("bounce"),
   stickerPosition: stickerPositionSchema.default("center"),
   stickerShape: stickerShapeSchema.default("circle"),
   stickerScale: z.number().min(0.5).max(2.0).default(1.0),
@@ -179,8 +183,8 @@ export const editConfigSchema = z.object({
   
   // Subtitle settings
   subtitlePosition: subtitlePositionSchema.default("bottom"),
-  subtitleSize: z.number().min(18).max(120),
-  subtitleY: z.number().min(0).max(100),
+  subtitleSize: z.number().min(18).max(120).default(48),
+  subtitleY: z.number().min(0).max(100).default(75),
   subtitleFontFamily: fontFamilySchema.default("Inter"),
   subtitleFontWeight: z.number().min(400).max(900).default(700),
   subtitleLetterSpacing: z.number().min(-2).max(10).default(0),
@@ -193,7 +197,7 @@ export const editConfigSchema = z.object({
   subtitleBackgroundBlur: z.number().min(0).max(20).default(0),
   
   // Background settings
-  bgDimOpacity: z.number().min(0).max(1),
+  bgDimOpacity: z.number().min(0).max(1).default(0.4),
   bgBlur: z.number().min(0).max(30).default(0),
   bgSaturation: z.number().min(0).max(2).default(1),
   bgBrightness: z.number().min(0).max(2).default(1),
@@ -201,7 +205,7 @@ export const editConfigSchema = z.object({
   bgScale: z.number().min(1).max(1.5).default(1),
   bgType: backgroundTypeSchema.default("video"),
   bgGradientColors: z.array(z.string()).default(["#1f3344", "#0a1620"]),
-  kenBurns: kenBurnsConfigSchema,
+  kenBurns: kenBurnsConfigSchema.default({enabled: false, zoomStart: 1, zoomEnd: 1.1, panStartX: 0, panEndX: 0, panStartY: 0, panEndY: 0, duration: 10}),
   colorGrading: colorGradingSchema.default("none"),
   
   // Layout settings
@@ -245,7 +249,7 @@ export const reelCompositionSchema = z.object({
   scriptLines: z.array(scriptLineSchema),
   speakerA: speakerConfigSchema,
   speakerB: speakerConfigSchema,
-  subtitleStyle: subtitleStyleSchema,
+  subtitleStyle: subtitleStyleSchema.default("pop-highlight"),
   editConfig: editConfigSchema,
   // New fields for enhanced video modes
   videoMode: videoModeSchema.default("duo-debate"),

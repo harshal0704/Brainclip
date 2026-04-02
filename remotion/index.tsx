@@ -4,12 +4,16 @@ import {ReelComposition} from "./ReelComposition";
 import {SingleHostComposition} from "./compositions/SingleHostComposition";
 import {DuoInterviewComposition} from "./compositions/DuoInterviewComposition";
 import {SideBySideComposition} from "./compositions/SideBySideComposition";
-import {reelCompositionSchema, defaultEditConfig, mergeEditConfig, getSubtitleYFromPosition, type ReelCompositionProps, videoModeSchema} from "./types";
+import {mergeEditConfig, type ReelCompositionProps} from "./types";
 
 const getDurationInFrames = (props: ReelCompositionProps) => {
-  const lastWord = props.wordTimings.reduce((max, word) => Math.max(max, word.end), 0);
-  const lastLine = props.scriptLines.reduce((max, line) => Math.max(max, line.endSec), 0);
-  return Math.max(90, Math.ceil(Math.max(lastWord, lastLine) * 30));
+  const timings = Array.isArray(props.wordTimings) ? props.wordTimings : [];
+  const lines = Array.isArray(props.scriptLines) ? props.scriptLines : [];
+  const lastWord = timings.reduce((max, word) => Math.max(max, word.end ?? 0), 0);
+  const lastLine = lines.reduce((max, line) => Math.max(max, line.endSec ?? 0), 0);
+  const raw = Math.max(lastWord, lastLine) * 30;
+  const frames = Number.isFinite(raw) ? Math.ceil(raw) : 0;
+  return Math.max(90, frames);
 };
 
 const defaultProps: ReelCompositionProps = {
@@ -65,6 +69,14 @@ const getCompositionComponent = (videoMode: string) => {
 };
 
 export const RemotionRoot = () => {
+  const safeDuration = (props: Record<string, unknown>) => {
+    try {
+      return getDurationInFrames(props as ReelCompositionProps);
+    } catch {
+      return 90;
+    }
+  };
+
   return (
     <>
       <Composition
@@ -74,10 +86,9 @@ export const RemotionRoot = () => {
         height={1280}
         fps={30}
         durationInFrames={getDurationInFrames(defaultProps)}
-        schema={reelCompositionSchema}
         defaultProps={defaultProps}
-        calculateMetadata={({props}: {props: ReelCompositionProps}) => ({
-          durationInFrames: getDurationInFrames(props),
+        calculateMetadata={({props}: {props: Record<string, unknown>}) => ({
+          durationInFrames: safeDuration(props),
         })}
       />
       <Composition
@@ -87,10 +98,9 @@ export const RemotionRoot = () => {
         height={1280}
         fps={30}
         durationInFrames={getDurationInFrames(defaultProps)}
-        schema={reelCompositionSchema}
         defaultProps={defaultProps}
-        calculateMetadata={({props}: {props: ReelCompositionProps}) => ({
-          durationInFrames: getDurationInFrames(props),
+        calculateMetadata={({props}: {props: Record<string, unknown>}) => ({
+          durationInFrames: safeDuration(props),
         })}
       />
       <Composition
@@ -100,10 +110,9 @@ export const RemotionRoot = () => {
         height={1280}
         fps={30}
         durationInFrames={getDurationInFrames(defaultProps)}
-        schema={reelCompositionSchema}
         defaultProps={defaultProps}
-        calculateMetadata={({props}: {props: ReelCompositionProps}) => ({
-          durationInFrames: getDurationInFrames(props),
+        calculateMetadata={({props}: {props: Record<string, unknown>}) => ({
+          durationInFrames: safeDuration(props),
         })}
       />
       <Composition
@@ -113,10 +122,9 @@ export const RemotionRoot = () => {
         height={1280}
         fps={30}
         durationInFrames={getDurationInFrames(defaultProps)}
-        schema={reelCompositionSchema}
         defaultProps={defaultProps}
-        calculateMetadata={({props}: {props: ReelCompositionProps}) => ({
-          durationInFrames: getDurationInFrames(props),
+        calculateMetadata={({props}: {props: Record<string, unknown>}) => ({
+          durationInFrames: safeDuration(props),
         })}
       />
     </>
