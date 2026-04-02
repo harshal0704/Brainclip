@@ -28,7 +28,16 @@ TEMP_DIR = APP_ROOT / "tmp"
 REF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
+from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(title="Brainclip Colab Voice Runtime — Fish S2-Pro")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 whisper_model: WhisperModel | None = None
 s2_engine: Any = None
