@@ -24,6 +24,8 @@ on:
         required: true
         type: string
 
+run-name: "Render Video - ${{ inputs.jobId }}"
+
 jobs:
   render:
     name: Render Video
@@ -56,8 +58,16 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
 
+      - name: Cache Webpack Build
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache
+          key: remotion-webpack-${{ hashFiles('remotion/**') }}
+          restore-keys: |
+            remotion-webpack-
+
       - name: Install dependencies
-        run: npm ci
+        run: npm install --prefer-offline --no-audit
 
       # ─── CRITICAL: Write inputProps to a file SAFELY ───
       # We CANNOT use echo '...' because the JSON may contain
@@ -256,8 +266,8 @@ jobs:
             --props=inputProps.json \
             --codec=h264 \
             --image-format=jpeg \
-            --crf=28 \
-            --concurrency=100% \
+            --crf=30 \
+            --concurrency=6 \
             --offthread-video-cache-size-in-bytes=536870912 \
             --log=verbose
 

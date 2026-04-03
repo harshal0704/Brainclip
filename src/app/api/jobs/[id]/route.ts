@@ -320,7 +320,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
             try {
               const runsRes = await fetch(
-                `https://api.github.com/repos/${githubRepo}/actions/workflows/render.yml/runs?per_page=3&status=in_progress`,
+                `https://api.github.com/repos/${githubRepo}/actions/workflows/render.yml/runs?per_page=10`,
                 {
                   headers: {
                     Authorization: `Bearer ${githubToken}`,
@@ -333,8 +333,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
               if (runsRes.ok) {
                 const runsData = await runsRes.json();
                 const runs = runsData.workflow_runs ?? [];
-                // Find the run for this job (most recent matching run)
-                const matchingRun = runs[0];
+                // Find the run for this job by searching the run name, or fallback to chronological most recent
+                const matchingRun = runs.find((r: any) => r.name?.includes(nextJob.id)) || runs[0];
 
                 if (matchingRun) {
                   const runStatus = matchingRun.status; // queued, in_progress, completed
