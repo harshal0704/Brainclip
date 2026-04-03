@@ -267,7 +267,6 @@ jobs:
             --codec=h264 \
             --image-format=jpeg \
             --crf=30 \
-            --concurrency=6 \
             --offthread-video-cache-size-in-bytes=536870912 \
             --log=verbose
 
