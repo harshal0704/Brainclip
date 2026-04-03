@@ -98,6 +98,7 @@ const requestedCreateJobSchema = z.object({
   voiceMap: apiVoiceMapSchema,
   subtitleStyleId: z.string().min(1),
   backgroundUrl: z.string().url().or(z.literal("")).optional().nullable(),
+  backgroundGameId: z.string().optional().default(""),
   editConfig: z.record(z.string(), z.unknown()).default({}),
   resolution: z.enum(["720p", "480p"]).optional(),
 });
@@ -116,6 +117,7 @@ export type NormalizedCreateJobInput = {
   voiceMap: Record<string, unknown>;
   subtitleStyleId: string;
   backgroundUrl: string;
+  backgroundGameId: string;
   editConfig: Record<string, unknown>;
   resolution: "720p" | "480p";
 };
@@ -131,6 +133,7 @@ export const normalizeCreateJobInput = (input: z.input<typeof appRouterCreateJob
       voiceMap: parsed.voiceMap,
       subtitleStyleId: parsed.subtitleStyleId,
       backgroundUrl: parsed.backgroundUrl ?? "",
+      backgroundGameId: parsed.backgroundGameId ?? "",
       editConfig: parsed.editConfig,
       resolution: parsed.resolution ?? "720p",
     };
@@ -147,6 +150,7 @@ export const normalizeCreateJobInput = (input: z.input<typeof appRouterCreateJob
     },
     subtitleStyleId: parsed.subtitleStyle,
     backgroundUrl: parsed.backgroundUrl,
+    backgroundGameId: "",
     editConfig: parsed.editConfig,
     resolution: parsed.resolution,
   };
@@ -417,6 +421,14 @@ export const buildRenderInputProps = async ({
   let resolvedBackgroundUrl = backgroundUrl ?? "";
   if (backgroundGameId && !resolvedBackgroundUrl) {
     resolvedBackgroundUrl = getRandomVideo(backgroundGameId) ?? "";
+  }
+
+  // Fallback: if still no background, auto-select a random game video
+  // so the rendered reel always has engaging gameplay footage
+  if (!resolvedBackgroundUrl) {
+    const fallbackGames = ["minecraft", "subway", "gta", "fortnite"];
+    const randomGame = fallbackGames[Math.floor(Math.random() * fallbackGames.length)];
+    resolvedBackgroundUrl = getRandomVideo(randomGame) ?? "";
   }
 
   // Shape speakerA/B to match the Remotion speakerConfigSchema

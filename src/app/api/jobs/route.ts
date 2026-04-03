@@ -28,6 +28,19 @@ export async function POST(request: NextRequest) {
       region: user.s3Region,
     });
 
+    // Resolve backgroundUrl from game ID if no direct URL was provided
+    let resolvedBackgroundUrl = body.backgroundUrl;
+    const bgGameId = body.backgroundGameId || (body.editConfig as any).backgroundGameId || "";
+    if (!resolvedBackgroundUrl && bgGameId) {
+      resolvedBackgroundUrl = getRandomVideo(bgGameId) ?? "";
+    }
+    // Fallback: if still no background, auto-select a random game video
+    if (!resolvedBackgroundUrl) {
+      const fallbackGames = ["minecraft", "subway", "gta", "fortnite"];
+      const randomGame = fallbackGames[Math.floor(Math.random() * fallbackGames.length)];
+      resolvedBackgroundUrl = getRandomVideo(randomGame) ?? "";
+    }
+
     const [createdJob] = await db
       .insert(jobs)
       .values({
@@ -42,10 +55,10 @@ export async function POST(request: NextRequest) {
           ...body.editConfig,
           topic: body.topic,
           duoId: body.duoId,
-          backgroundGameId: (body.editConfig as any).backgroundGameId ?? "",
+          backgroundGameId: bgGameId,
         },
         subtitleStyleId: body.subtitleStyleId,
-        backgroundUrl: body.backgroundUrl,
+        backgroundUrl: resolvedBackgroundUrl,
         resolution: body.resolution,
         s3AudioKeys: {
           ...presigned.keys.audioFiles,
