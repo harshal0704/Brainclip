@@ -8,8 +8,8 @@ import { Config } from "@remotion/cli/config";
 Config.setChromiumDisableWebSecurity(true);
 Config.setChromiumIgnoreCertificateErrors(true);
 
-// Set the OpenGL command to utilize pure CPU rendering without emulating GPU interfaces
-Config.setChromiumOpenGlCommand("swiftshader");
+// Set the OpenGL renderer to utilize pure CPU rendering without emulating GPU interfaces
+Config.setChromiumOpenGlRenderer("swiftshader");
 
 // Optimize webpack build to generate source maps faster
 Config.overrideWebpackConfig((currentConfiguration) => {
