@@ -167,7 +167,7 @@ jobs:
                 if (stat.size > 0) {
                   console.log(`✅ CACHED  [${label}]: ${path.basename(localFile)} (${(stat.size / 1024 / 1024).toFixed(1)}MB)`);
                   cached++;
-                  return localFile;
+                  return require('url').pathToFileURL(localFile).href;
                 }
               }
 
@@ -183,7 +183,7 @@ jobs:
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
                 console.log(`✅ OK      [${label}]: ${(stat.size / 1024 / 1024).toFixed(1)}MB in ${elapsed}s`);
                 downloaded++;
-                return localFile;
+                return require('url').pathToFileURL(localFile).href;
               } catch (err) {
                 console.warn(`⚠️  FAILED  [${label}]: ${err.message} — falling back to remote URL`);
                 try { fs.unlinkSync(localFile); } catch {}
