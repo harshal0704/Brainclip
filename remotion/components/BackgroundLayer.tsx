@@ -12,13 +12,13 @@ type BackgroundLayerProps = {
 const getColorGradingFilter = (colorGrading: ColorGrading): string => {
   switch (colorGrading) {
     case "warm":
-      return "sepia(0.3) saturate(1.2) brightness(1.05)";
+      return "sepia(0.25) saturate(1.15) brightness(1.05)";
     case "cool":
-      return "saturate(0.9) hue-rotate(15deg) brightness(1.05)";
+      return "saturate(0.85) hue-rotate(12deg) brightness(1.05)";
     case "vintage":
-      return "sepia(0.4) contrast(1.1) brightness(0.95)";
+      return "sepia(0.35) contrast(1.1) brightness(0.95)";
     case "cinematic":
-      return "contrast(1.15) saturate(0.9) brightness(0.95)";
+      return "contrast(1.15) saturate(0.85) brightness(0.92)";
     case "noir":
       return "grayscale(1) contrast(1.2) brightness(0.9)";
     case "none":
@@ -38,8 +38,7 @@ const getGradientStyle = (colors: string[], colorGrading: ColorGrading): React.C
   };
 };
 
-const KenBurnsEffect = ({kenBurns, colorGrading}: {kenBurns: KenBurnsConfig; colorGrading: ColorGrading}) => {
-  const frame = useCurrentFrame();
+const getKenBurnsStyle = (kenBurns: KenBurnsConfig, frame: number): React.CSSProperties => {
   const cycleFrame = frame % (kenBurns.duration * 30);
   const progress = cycleFrame / (kenBurns.duration * 30);
   
@@ -48,8 +47,9 @@ const KenBurnsEffect = ({kenBurns, colorGrading}: {kenBurns: KenBurnsConfig; col
   const translateY = interpolate(progress, [0, 1], [kenBurns.panStartY, kenBurns.panEndY]);
   
   return {
+    position: "absolute" as const,
+    inset: 0,
     transform: `scale(${scale}) translate(${translateX}%, ${translateY}%)`,
-    filter: getColorGradingFilter(colorGrading),
   };
 };
 
@@ -73,34 +73,44 @@ export const BackgroundLayer = ({
     overflow: "hidden",
   };
   
-  const overlayStyle: React.CSSProperties = {
+  // Single unified vignette — combines dim + edge darkening in one layer
+  // This replaces the old separate overlayStyle + vignetteStyle
+  const unifiedVignetteStyle: React.CSSProperties = {
     position: "absolute",
     inset: 0,
-    backgroundColor: `rgba(4, 10, 16, ${bgDimOpacity})`,
+    background: [
+      // Soft radial vignette (edge darkening)
+      `radial-gradient(ellipse 72% 65% at 50% 50%, transparent 0%, rgba(3,8,14,${Math.min(0.85, bgDimOpacity + 0.35)}) 100%)`,
+      // Top fade for safe area
+      `linear-gradient(180deg, rgba(3,8,14,${bgDimOpacity * 0.6}) 0%, transparent 18%)`,
+      // Bottom fade for subtitle readability
+      `linear-gradient(0deg, rgba(3,8,14,${bgDimOpacity * 0.8}) 0%, transparent 22%)`,
+    ].join(", "),
+    pointerEvents: "none",
   };
   
-  const vignetteStyle: React.CSSProperties = {
-    position: "absolute",
-    inset: 0,
-    background: "linear-gradient(180deg, rgba(5,10,15,0.7) 0%, rgba(5,10,15,0.12) 28%, rgba(5,10,15,0.18) 72%, rgba(5,10,15,0.82) 100%)",
-  };
+  // Build the media filter — applied once on the media container
+  const mediaFilterParts: string[] = [];
+  if (bgBlur > 0) mediaFilterParts.push(`blur(${bgBlur}px)`);
+  if (bgSaturation !== 1) mediaFilterParts.push(`saturate(${bgSaturation})`);
+  if (bgBrightness !== 1) mediaFilterParts.push(`brightness(${bgBrightness})`);
+  if (bgContrast !== 1) mediaFilterParts.push(`contrast(${bgContrast})`);
+  if (colorGradingFilter !== "none") mediaFilterParts.push(colorGradingFilter);
   
-  const colorFilterStyle: React.CSSProperties = {
-    filter: `blur(${bgBlur}px) saturate(${bgSaturation}) brightness(${bgBrightness}) contrast(${bgContrast}) ${colorGradingFilter}`,
-  };
+  const mediaFilter = mediaFilterParts.length > 0 ? mediaFilterParts.join(" ") : "none";
 
   const renderBackground = () => {
     switch (backgroundType) {
       case "image":
         return (
-          <div style={{...containerStyle, ...colorFilterStyle, transform: `scale(${bgScale})`}}>
+          <div style={{...containerStyle, filter: mediaFilter, transform: `scale(${bgScale})`}}>
             {backgroundImage && (
               <Img
                 src={backgroundImage}
                 style={{width: "100%", height: "100%", objectFit: "cover"}}
               />
             )}
-            {hasKenBurns && <div style={KenBurnsEffect({kenBurns, colorGrading})} />}
+            {hasKenBurns && <div style={getKenBurnsStyle(kenBurns, frame)} />}
           </div>
         );
       
@@ -111,9 +121,7 @@ export const BackgroundLayer = ({
               ...containerStyle,
               ...getGradientStyle(bgGradientColors, colorGrading),
             }}
-          >
-            {hasKenBurns && <div style={KenBurnsEffect({kenBurns, colorGrading})} />}
-          </div>
+          />
         );
       
       case "solid":
@@ -130,7 +138,7 @@ export const BackgroundLayer = ({
       case "video":
       default:
         return (
-          <div style={{...containerStyle, ...colorFilterStyle}}>
+          <div style={{...containerStyle, filter: mediaFilter}}>
             {backgroundSrc ? (
               <OffthreadVideo
                 src={backgroundSrc}
@@ -150,18 +158,11 @@ export const BackgroundLayer = ({
                   position: "absolute",
                   inset: 0,
                   background: "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.18), transparent 28%), linear-gradient(180deg, #1f3344 0%, #0a1620 54%, #05080c 100%)",
-                  filter: colorGradingFilter,
                 }}
               />
             )}
             {hasKenBurns && backgroundSrc && (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  ...KenBurnsEffect({kenBurns, colorGrading: "none"}),
-                }}
-              />
+              <div style={getKenBurnsStyle(kenBurns, frame)} />
             )}
           </div>
         );
@@ -171,8 +172,7 @@ export const BackgroundLayer = ({
   return (
     <div style={{position: "absolute", inset: 0}}>
       {renderBackground()}
-      <div style={overlayStyle} />
-      <div style={vignetteStyle} />
+      <div style={unifiedVignetteStyle} />
     </div>
   );
 };

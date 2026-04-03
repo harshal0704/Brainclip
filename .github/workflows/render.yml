@@ -40,7 +40,18 @@ jobs:
           node-version: 22
           cache: 'npm'
 
+      # ─── Cache FFmpeg binary across runs ───
+      - name: Cache FFmpeg
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/bin/ffmpeg
+            /usr/bin/ffprobe
+          key: ffmpeg-${{ runner.os }}-v1
+
       - name: Install FFmpeg
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
@@ -60,6 +71,150 @@ jobs:
             const inputProps = context.payload.inputs.inputProps;
             fs.writeFileSync('inputProps.json', inputProps, 'utf8');
             console.log(`Wrote inputProps.json (${inputProps.length} chars)`);
+
+      # ─── Extract cache key from background video URL ───
+      # We extract the S3 path from backgroundSrc to build a stable
+      # cache key. Presigned URLs change each run, but the S3 path
+      # (e.g. /Fortnite/split_001.mp4) stays the same.
+      - name: Compute media cache key
+        id: media-key
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const props = JSON.parse(fs.readFileSync('inputProps.json', 'utf8'));
+
+            const urls = [
+              props.backgroundSrc || '',
+              props.speakerA?.stickerUrl || '',
+              props.speakerB?.stickerUrl || '',
+            ].filter(u => u && !u.startsWith('data:') && !u.startsWith('file://'));
+
+            // Build cache key from URL pathnames (stable across presigned URL regenerations)
+            const pathParts = urls.map(u => {
+              try { return new URL(u).pathname; } catch { return u; }
+            }).join('|');
+
+            const hash = crypto.createHash('sha256').update(pathParts).digest('hex').slice(0, 20);
+            core.setOutput('hash', hash);
+            console.log(`Media cache key hash: ${hash}`);
+            console.log(`Based on ${urls.length} asset URLs`);
+
+      # ─── Restore cached media from previous renders ───
+      # Background videos are stable S3 objects — same path = same content.
+      # This avoids re-downloading 10-50MB video files every render.
+      - name: Restore media cache
+        id: media-cache
+        uses: actions/cache@v4
+        with:
+          path: .media-cache
+          key: media-${{ steps.media-key.outputs.hash }}
+          restore-keys: |
+            media-
+
+      # ─── Pre-download & localize all media assets ───
+      # Downloads background video, audio, and stickers to local disk.
+      # If the GitHub Actions cache already has the file, skip the download.
+      # Rewrites inputProps.json to point to local paths so Remotion reads
+      # from disk (instant) instead of streaming from S3 (slow & flaky).
+      - name: Pre-download & localize media assets
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const crypto = require('crypto');
+            const { execSync } = require('child_process');
+
+            const props = JSON.parse(fs.readFileSync('inputProps.json', 'utf8'));
+            const cacheDir = path.join(process.env.GITHUB_WORKSPACE, '.media-cache');
+            fs.mkdirSync(cacheDir, { recursive: true });
+
+            let downloaded = 0;
+            let cached = 0;
+            let skipped = 0;
+
+            /**
+             * Downloads a URL to a deterministic local path.
+             * Returns the absolute local path, or the original URL on failure.
+             */
+            function localizeUrl(url, label) {
+              if (!url || typeof url !== 'string') return url;
+
+              // Skip data URIs, file URIs, or empty strings
+              if (url.startsWith('data:') || url.startsWith('file://') || url.trim() === '') {
+                skipped++;
+                return url;
+              }
+
+              // Build a cache key from the URL pathname (stable across presigned URL changes)
+              let cacheKey, ext;
+              try {
+                const parsed = new URL(url);
+                cacheKey = crypto.createHash('sha256').update(parsed.pathname).digest('hex').slice(0, 16);
+                ext = path.extname(parsed.pathname) || '.bin';
+              } catch {
+                cacheKey = crypto.createHash('sha256').update(url).digest('hex').slice(0, 16);
+                ext = '.bin';
+              }
+
+              const localFile = path.join(cacheDir, `${label}_${cacheKey}${ext}`);
+
+              // Cache hit — file already exists from a previous run
+              if (fs.existsSync(localFile)) {
+                const stat = fs.statSync(localFile);
+                if (stat.size > 0) {
+                  console.log(`✅ CACHED  [${label}]: ${path.basename(localFile)} (${(stat.size / 1024 / 1024).toFixed(1)}MB)`);
+                  cached++;
+                  return localFile;
+                }
+              }
+
+              // Cache miss — download with curl
+              console.log(`⬇️  DOWNLOAD [${label}]: ${url.substring(0, 100)}...`);
+              const startTime = Date.now();
+              try {
+                execSync(
+                  `curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 300 -o "${localFile}" "${url}"`,
+                  { stdio: 'pipe', timeout: 320000 }
+                );
+                const stat = fs.statSync(localFile);
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.log(`✅ OK      [${label}]: ${(stat.size / 1024 / 1024).toFixed(1)}MB in ${elapsed}s`);
+                downloaded++;
+                return localFile;
+              } catch (err) {
+                console.warn(`⚠️  FAILED  [${label}]: ${err.message} — falling back to remote URL`);
+                try { fs.unlinkSync(localFile); } catch {}
+                return url;
+              }
+            }
+
+            // ── Localize all media assets ──
+            if (props.backgroundSrc) {
+              props.backgroundSrc = localizeUrl(props.backgroundSrc, 'bg_video');
+            }
+            if (props.audioSrc) {
+              props.audioSrc = localizeUrl(props.audioSrc, 'audio');
+            }
+            if (props.speakerA?.stickerUrl) {
+              props.speakerA.stickerUrl = localizeUrl(props.speakerA.stickerUrl, 'sticker_a');
+            }
+            if (props.speakerB?.stickerUrl) {
+              props.speakerB.stickerUrl = localizeUrl(props.speakerB.stickerUrl, 'sticker_b');
+            }
+
+            // Write updated props with local paths
+            fs.writeFileSync('inputProps.json', JSON.stringify(props, null, 2), 'utf8');
+
+            console.log('');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log(`📊 Media localization summary:`);
+            console.log(`   ${cached} from cache (instant)`);
+            console.log(`   ${downloaded} freshly downloaded`);
+            console.log(`   ${skipped} skipped (empty/inline)`);
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       # Now read from the file — no shell escaping issues
       - name: Determine Composition
@@ -84,12 +239,19 @@ jobs:
 
       - name: Render Video
         run: |
+          echo "🎬 Starting Remotion render..."
+          echo ""
+          echo "📁 Cached media files:"
+          ls -lh .media-cache/ 2>/dev/null || echo "  (no cached files)"
+          echo ""
+
           npx remotion render remotion/index.tsx ${{ steps.comp.outputs.composition }} out.mp4 \
             --props=inputProps.json \
             --codec=h264 \
             --image-format=jpeg \
             --crf=28 \
-            --concurrency=50% \
+            --concurrency=100% \
+            --offthread-video-cache-size-in-bytes=536870912 \
             --log=verbose
 
       - name: Configure AWS Credentials

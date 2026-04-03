@@ -98,7 +98,7 @@ const InterviewNamePlate = ({
 
 export const DuoInterviewComposition = (props: ReelCompositionProps) => {
   const frame = useCurrentFrame();
-  const {fps, width, height} = useVideoConfig();
+  const {fps, width} = useVideoConfig();
   const activeLine = getActiveLine(frame, fps, props.scriptLines);
   const activeSpeaker = activeLine?.speaker ?? null;
   const subtitleAccent = activeSpeaker === "B" ? props.speakerB.color : props.speakerA.color;
@@ -131,39 +131,6 @@ export const DuoInterviewComposition = (props: ReelCompositionProps) => {
     }}>
       <BackgroundLayer backgroundSrc={props.backgroundSrc} editConfig={props.editConfig} />
       {props.audioSrc ? <Audio src={props.audioSrc} /> : null}
-
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: pipSize + 80,
-          top: 0,
-          bottom: 0,
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            left: 36,
-            right: 36,
-            top: 34,
-            bottom: 34,
-            borderRadius: 44,
-            border: "1px solid rgba(255,255,255,0.09)",
-            boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.03), 0 16px 40px rgba(0,0,0,0.18)`,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: height / 2 - 90,
-            height: 180,
-            background: "linear-gradient(180deg, transparent 0%, rgba(5,8,12,0.18) 35%, rgba(5,8,12,0.52) 100%)",
-          }}
-        />
-      </div>
 
       <AudioVisualizer speakerAColor={props.speakerA.color} speakerBColor={props.speakerB.color} scriptLines={props.scriptLines} />
       <ProgressBar color={subtitleAccent} />

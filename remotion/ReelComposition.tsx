@@ -19,25 +19,28 @@ const getActiveSpeaker = (frame: number, fps: number, scriptLines: ScriptLine[])
 };
 
 // ------------------------------------------------------------
-// AmbientOrbs — subtle drifting light particles
+// AmbientOrbs — subtle drifting light particles (refined)
 // ------------------------------------------------------------
-const AmbientOrbs = ({speakerAColor, speakerBColor}: {speakerAColor: string; speakerBColor: string}) => {
+const AmbientOrbs = ({speakerAColor, speakerBColor, activeSpeaker}: {speakerAColor: string; speakerBColor: string; activeSpeaker: SpeakerId | null}) => {
   const frame = useCurrentFrame();
   const {width, height} = useVideoConfig();
 
   const orbs = [
-    {x: 0.15, yBase: 0.22, color: speakerAColor, size: 180, speed: 0.0018, phase: 0},
-    {x: 0.82, yBase: 0.18, color: speakerBColor, size: 140, speed: 0.0022, phase: 1.2},
-    {x: 0.5,  yBase: 0.55, color: speakerAColor, size: 120, speed: 0.0015, phase: 2.4},
-    {x: 0.25, yBase: 0.78, color: speakerBColor, size: 160, speed: 0.002,  phase: 0.8},
-    {x: 0.74, yBase: 0.65, color: speakerAColor, size: 100, speed: 0.0025, phase: 3.1},
+    {x: 0.12, yBase: 0.18, color: speakerAColor, size: 200, speed: 0.0012, phase: 0},
+    {x: 0.88, yBase: 0.15, color: speakerBColor, size: 160, speed: 0.0016, phase: 1.4},
+    {x: 0.5,  yBase: 0.5,  color: speakerAColor, size: 140, speed: 0.001,  phase: 2.8},
+    {x: 0.22, yBase: 0.82, color: speakerBColor, size: 180, speed: 0.0014, phase: 0.6},
   ];
 
   return (
     <>
       {orbs.map((orb, i) => {
-        const drift = Math.sin(frame * orb.speed + orb.phase) * 28;
-        const pulsate = 0.06 + Math.sin(frame * orb.speed * 1.7 + orb.phase) * 0.04;
+        const drift = Math.sin(frame * orb.speed + orb.phase) * 20;
+        // Orbs respond to active speaker — glow brighter when matching
+        const isMatchingSpeaker = (i % 2 === 0 && activeSpeaker === "A") || (i % 2 === 1 && activeSpeaker === "B");
+        const baseOpacity = 0.04 + Math.sin(frame * orb.speed * 1.5 + orb.phase) * 0.025;
+        const orbOpacity = isMatchingSpeaker ? baseOpacity + 0.03 : baseOpacity;
+        
         return (
           <div
             key={i}
@@ -48,9 +51,9 @@ const AmbientOrbs = ({speakerAColor, speakerBColor}: {speakerAColor: string; spe
               borderRadius: "50%",
               left: orb.x * width - orb.size / 2,
               top: orb.yBase * height - orb.size / 2 + drift,
-              background: `radial-gradient(circle, ${orb.color} 0%, transparent 68%)`,
-              opacity: pulsate,
-              filter: "blur(32px)",
+              background: `radial-gradient(circle, ${orb.color} 0%, transparent 65%)`,
+              opacity: orbOpacity,
+              filter: "blur(40px)",
               pointerEvents: "none",
             }}
           />
@@ -61,70 +64,31 @@ const AmbientOrbs = ({speakerAColor, speakerBColor}: {speakerAColor: string; spe
 };
 
 // ------------------------------------------------------------
-// ConversationOverlay — smooth shimmer with spring
+// SpeakerGlow — minimal speaker-reactive glow (replaces heavy ConversationOverlay)
 // ------------------------------------------------------------
-const ConversationOverlay = ({activeSpeaker, speakerAColor, speakerBColor}: {activeSpeaker: SpeakerId | null; speakerAColor: string; speakerBColor: string}) => {
+const SpeakerGlow = ({activeSpeaker, speakerAColor, speakerBColor}: {activeSpeaker: SpeakerId | null; speakerAColor: string; speakerBColor: string}) => {
   const frame = useCurrentFrame();
   const {width, height} = useVideoConfig();
 
-  // Pulsing glow — smooth sine instead of raw interpolate
-  const shimmerA = 0.14 + Math.sin(frame * 0.08) * 0.08;
-  const shimmerB = 0.14 + Math.sin(frame * 0.08 + Math.PI) * 0.08;
+  const pulse = 0.12 + Math.sin(frame * 0.06) * 0.06;
+  const activeColor = activeSpeaker === "B" ? speakerBColor : speakerAColor;
 
   return (
     <>
-      {/* Speaker A glow */}
+      {/* Single subtle reactive glow — follows active speaker */}
       <div
         style={{
           position: "absolute",
-          top: 60,
-          left: width / 2 - 200,
-          width: 400,
-          height: 260,
+          top: height * 0.4,
+          left: width / 2 - 280,
+          width: 560,
+          height: 320,
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${speakerAColor} 0%, transparent 68%)`,
-          opacity: activeSpeaker === "A" ? shimmerA + 0.12 : shimmerA * 0.4,
-          filter: "blur(42px)",
-          transition: "opacity 0.3s ease",
-        }}
-      />
-      {/* Speaker B glow */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 120,
-          left: width / 2 - 200,
-          width: 400,
-          height: 260,
-          borderRadius: "50%",
-          background: `radial-gradient(circle, ${speakerBColor} 0%, transparent 68%)`,
-          opacity: activeSpeaker === "B" ? shimmerB + 0.12 : shimmerB * 0.4,
-          filter: "blur(42px)",
-          transition: "opacity 0.3s ease",
-        }}
-      />
-      {/* Frame border */}
-      <div
-        style={{
-          position: "absolute",
-          left: 36,
-          right: 36,
-          top: 34,
-          bottom: 34,
-          borderRadius: 44,
-          border: "1px solid rgba(255,255,255,0.09)",
-          boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.03), 0 16px 40px rgba(0,0,0,0.18)`,
-        }}
-      />
-      {/* Center vignette band */}
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: height / 2 - 90,
-          height: 180,
-          background: "linear-gradient(180deg, transparent 0%, rgba(5,8,12,0.18) 35%, rgba(5,8,12,0.52) 100%)",
+          background: `radial-gradient(circle, ${activeColor} 0%, transparent 60%)`,
+          opacity: activeSpeaker ? pulse : pulse * 0.3,
+          filter: "blur(50px)",
+          pointerEvents: "none",
+          transition: "opacity 0.4s ease",
         }}
       />
     </>
@@ -245,10 +209,12 @@ export const ReelComposition = (props: ReelCompositionProps) => {
       <BackgroundLayer backgroundSrc={props.backgroundSrc} editConfig={props.editConfig} />
       {props.audioSrc ? <Audio src={props.audioSrc} /> : null}
 
-      {/* Ambient floating orbs */}
-      <AmbientOrbs speakerAColor={props.speakerA.color} speakerBColor={props.speakerB.color} />
+      {/* Subtle ambient orbs — speaker-reactive */}
+      <AmbientOrbs speakerAColor={props.speakerA.color} speakerBColor={props.speakerB.color} activeSpeaker={activeSpeaker} />
 
-      <ConversationOverlay activeSpeaker={activeSpeaker} speakerAColor={props.speakerA.color} speakerBColor={props.speakerB.color} />
+      {/* Single clean speaker glow (replaces heavy ConversationOverlay) */}
+      <SpeakerGlow activeSpeaker={activeSpeaker} speakerAColor={props.speakerA.color} speakerBColor={props.speakerB.color} />
+
       <AudioVisualizer speakerAColor={props.speakerA.color} speakerBColor={props.speakerB.color} scriptLines={props.scriptLines} />
       <IntroBadge speakerAColor={props.speakerA.color} speakerBColor={props.speakerB.color} show={showIntroBadge} />
 
