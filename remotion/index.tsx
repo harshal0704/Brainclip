@@ -16,6 +16,16 @@ const getDurationInFrames = (props: ReelCompositionProps) => {
   return Math.max(90, frames);
 };
 
+const getResolution = (resolution?: string) => {
+  switch (resolution) {
+    case "480p":
+      return {width: 480, height: 854};
+    case "720p":
+    default:
+      return {width: 720, height: 1280};
+  }
+};
+
 const defaultProps: ReelCompositionProps = {
   audioSrc: "",
   backgroundSrc: "",
@@ -50,6 +60,7 @@ const defaultProps: ReelCompositionProps = {
   videoStyle: "default",
   speakerLayout: "bottom-anchored",
   overlays: [],
+  resolution: "720p",
 };
 
 const getCompositionComponent = (videoMode: string) => {
@@ -69,11 +80,17 @@ const getCompositionComponent = (videoMode: string) => {
 };
 
 export const RemotionRoot = () => {
-  const safeDuration = (props: Record<string, unknown>) => {
+  const calculateMeta = ({props}: {props: Record<string, unknown>}) => {
     try {
-      return getDurationInFrames(props as ReelCompositionProps);
+      const typed = props as ReelCompositionProps;
+      const res = getResolution(typed.resolution);
+      return {
+        durationInFrames: getDurationInFrames(typed),
+        width: res.width,
+        height: res.height,
+      };
     } catch {
-      return 90;
+      return {durationInFrames: 90};
     }
   };
 
@@ -87,9 +104,7 @@ export const RemotionRoot = () => {
         fps={30}
         durationInFrames={getDurationInFrames(defaultProps)}
         defaultProps={defaultProps}
-        calculateMetadata={({props}: {props: Record<string, unknown>}) => ({
-          durationInFrames: safeDuration(props),
-        })}
+        calculateMetadata={calculateMeta}
       />
       <Composition
         id="SingleHostComposition"
@@ -99,9 +114,7 @@ export const RemotionRoot = () => {
         fps={30}
         durationInFrames={getDurationInFrames(defaultProps)}
         defaultProps={defaultProps}
-        calculateMetadata={({props}: {props: Record<string, unknown>}) => ({
-          durationInFrames: safeDuration(props),
-        })}
+        calculateMetadata={calculateMeta}
       />
       <Composition
         id="DuoInterviewComposition"
@@ -111,9 +124,7 @@ export const RemotionRoot = () => {
         fps={30}
         durationInFrames={getDurationInFrames(defaultProps)}
         defaultProps={defaultProps}
-        calculateMetadata={({props}: {props: Record<string, unknown>}) => ({
-          durationInFrames: safeDuration(props),
-        })}
+        calculateMetadata={calculateMeta}
       />
       <Composition
         id="SideBySideComposition"
@@ -123,9 +134,7 @@ export const RemotionRoot = () => {
         fps={30}
         durationInFrames={getDurationInFrames(defaultProps)}
         defaultProps={defaultProps}
-        calculateMetadata={({props}: {props: Record<string, unknown>}) => ({
-          durationInFrames: safeDuration(props),
-        })}
+        calculateMetadata={calculateMeta}
       />
     </>
   );

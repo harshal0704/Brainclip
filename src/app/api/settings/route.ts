@@ -13,7 +13,7 @@ const settingsSchema = z.object({
   llmBaseUrl: z.string().url().optional().or(z.literal("")),
   llmModel: z.string().optional().or(z.literal("")),
   llmApiKey: z.string().optional(),
-  ttsProvider: z.enum(["fish", "huggingface", "elevenlabs", "polly"]).optional(),
+  ttsProvider: z.enum(["fish", "huggingface", "elevenlabs", "polly", "colab"]).optional(),
   renderProvider: z.enum(["lambda", "colab", "github"]).optional(),
   fishModelA: z.string().optional(),
   fishModelB: z.string().optional(),

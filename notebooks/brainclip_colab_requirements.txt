@@ -19,3 +19,4 @@ transformers==4.49.0
 accelerate==1.2.1
 vllm==0.8.4
 pydantic==2.10.6
+fish-speech>=1.4.0

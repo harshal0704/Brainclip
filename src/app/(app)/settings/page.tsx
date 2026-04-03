@@ -37,8 +37,8 @@ export default function SettingsPage() {
   const readyForHf = Boolean((settings.hasHfToken || settings.hfToken) && settings.hfModelA && settings.hfModelB);
   const readyForElevenLabs = Boolean((settings.hasElevenLabsApiKey || settings.elevenLabsApiKey) && settings.elevenLabsVoiceA && settings.elevenLabsVoiceB);
   const readyForPolly = Boolean(settings.pollyVoiceA && settings.pollyVoiceB);
-  const readyForTTS = settings.ttsProvider === "huggingface" ? readyForHf : settings.ttsProvider === "elevenlabs" ? readyForElevenLabs : settings.ttsProvider === "polly" ? readyForPolly : readyForFish;
   const readyForColab = Boolean(settings.colabUrl);
+  const readyForTTS = settings.ttsProvider === "huggingface" ? readyForHf : settings.ttsProvider === "elevenlabs" ? readyForElevenLabs : settings.ttsProvider === "polly" ? readyForPolly : settings.ttsProvider === "colab" ? readyForColab : readyForFish;
   // GitHub Actions uses .env values (GITHUB_TOKEN + GITHUB_REPO), no per-user config needed
   const readyForGithub = settings.renderProvider === "github" ? renderHealth.ok : true;
   const readyForLlm = Boolean(settings.llmModel && (settings.hasLlmApiKey || settings.llmApiKey));
@@ -190,14 +190,30 @@ export default function SettingsPage() {
               <span>TTS Provider</span>
               <select
                 value={settings.ttsProvider}
-                onChange={(e) => setSettings((c) => ({ ...c, ttsProvider: e.target.value as "fish" | "huggingface" | "elevenlabs" | "polly" }))}
+                onChange={(e) => setSettings((c) => ({ ...c, ttsProvider: e.target.value as "fish" | "huggingface" | "elevenlabs" | "polly" | "colab" }))}
               >
                 <option value="fish">Fish.audio (Recommended)</option>
                 <option value="huggingface">Hugging Face (Kokoro)</option>
                 <option value="elevenlabs">Eleven Labs</option>
                 <option value="polly">Amazon Polly</option>
+                <option value="colab">Colab Server (Local Fish TTS)</option>
               </select>
             </label>
+
+            {settings.ttsProvider === "colab" && (
+              <div className="colab-help-section" style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
+                <div className="colab-help-content" style={{ backgroundColor: 'rgba(0, 0, 0, 0.2)' }}>
+                  <p style={{ margin: 0, color: 'var(--foreground-muted)' }}>
+                    <strong>Note:</strong> You must configure your Colab Server URL in the <strong>🔌 Colab Setup</strong> tab to use local GPU inference.
+                  </p>
+                  {!readyForColab && (
+                    <button className="primary-button" style={{ marginTop: '12px' }} onClick={() => setActiveTab("colab")}>
+                      Configure Colab URL →
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {settings.ttsProvider === "fish" && (
               <>

@@ -218,6 +218,8 @@ export const gameBackgroundCatalog = [
     videos: [
       "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_001.mp4",
       "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_002.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_003.mp4",
+      "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_004.mp4",
       "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_005.mp4",
       "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_006.mp4",
       "https://brainclips-videos.s3.us-east-1.amazonaws.com/Minecraft/reel_007.mp4",

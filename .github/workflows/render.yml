@@ -48,13 +48,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # ─── CRITICAL: Write inputProps to a file SAFELY ───
+      # We CANNOT use echo '...' because the JSON may contain
+      # single quotes (apostrophes in words like "isn't", "aren't").
+      # Using actions/github-script avoids all shell escaping issues.
+      - name: Write Input Props
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const inputProps = context.payload.inputs.inputProps;
+            fs.writeFileSync('inputProps.json', inputProps, 'utf8');
+            console.log(`Wrote inputProps.json (${inputProps.length} chars)`);
+
+      # Now read from the file — no shell escaping issues
       - name: Determine Composition
         id: comp
         run: |
-          # Extract videoMode from inputProps to select the correct composition
-          VIDEO_MODE=$(echo '${{ github.event.inputs.inputProps }}' | node -e "
-            const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+          VIDEO_MODE=$(node -e "
+            const data = JSON.parse(require('fs').readFileSync('inputProps.json','utf8'));
             const mode = data.videoMode || 'duo-debate';
+            const resolution = data.resolution || '720p';
             const map = {
               'single-host': 'SingleHostComposition',
               'single-presenter': 'SingleHostComposition',
@@ -68,9 +82,6 @@ jobs:
           echo "composition=$VIDEO_MODE" >> $GITHUB_OUTPUT
           echo "Using composition: $VIDEO_MODE"
 
-      - name: Write Input Props
-        run: echo '${{ github.event.inputs.inputProps }}' > inputProps.json
-
       - name: Render Video
         run: |
           npx remotion render remotion/index.tsx ${{ steps.comp.outputs.composition }} out.mp4 \
@@ -78,6 +89,7 @@ jobs:
             --codec=h264 \
             --image-format=jpeg \
             --crf=28 \
+            --concurrency=50% \
             --log=verbose
 
       - name: Configure AWS Credentials

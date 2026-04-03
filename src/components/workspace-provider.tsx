@@ -26,7 +26,7 @@ export type SettingsState = {
   llmBaseUrl: string;
   llmModel: string;
   llmApiKey: string;
-  ttsProvider: "fish" | "huggingface" | "elevenlabs" | "polly";
+  ttsProvider: "fish" | "huggingface" | "elevenlabs" | "polly" | "colab";
   renderProvider: "lambda" | "colab" | "github";
   fishModelA: string;
   fishModelB: string;
@@ -216,6 +216,7 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
       const data = await response.json();
       if (response.ok) {
         setSettings((current) => ({ ...current, ...data.settings, llmApiKey: data.settings.llmApiKey || "", fishApiKey: data.settings.fishApiKey || "", hfToken: data.settings.hfToken || "", elevenLabsApiKey: data.settings.elevenLabsApiKey || "", pollyVoiceA: data.settings.pollyVoiceA || "Matthew", pollyVoiceB: data.settings.pollyVoiceB || "Joanna", githubToken: data.settings.githubToken || "", githubRepo: data.settings.githubRepo || "" }));
+        setEditorForm((current) => ({ ...current, voiceMode: data.settings.ttsProvider === "colab" ? "colab" : "fish-api" }));
       }
     } finally {
       setIsLoadingSettings(false);
@@ -443,6 +444,7 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
     }
 
     setSettings((current) => ({ ...current, ...data.settings, llmApiKey: data.settings.llmApiKey || "", fishApiKey: data.settings.fishApiKey || "", hfToken: data.settings.hfToken || "", githubToken: data.settings.githubToken || "", githubRepo: data.settings.githubRepo || "" }));
+    setEditorForm((current) => ({ ...current, voiceMode: data.settings.ttsProvider === "colab" ? "colab" : "fish-api" }));
     setSettingsMessage("Studio settings saved. Brainclip can now generate and route jobs.");
   }, [settings]);
 

@@ -104,6 +104,7 @@ export const wordTimingSchema = z.object({
   word: z.string(),
   start: z.number().nonnegative(),
   end: z.number().nonnegative(),
+  speaker: speakerIdSchema.optional(),
 });
 
 export const scriptLineSchema = z.object({
@@ -260,6 +261,7 @@ export const reelCompositionSchema = z.object({
   outroConfig: outroConfigSchema.optional(),
   endCardConfig: endCardConfigSchema.optional(),
   overlays: z.array(overlayElementSchema).default([]),
+  resolution: z.enum(["720p", "480p"]).default("720p"),
 });
 
 export type SpeakerId = z.infer<typeof speakerIdSchema>;

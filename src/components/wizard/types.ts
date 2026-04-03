@@ -47,7 +47,8 @@ export type SettingsState = {
   llmBaseUrl: string;
   llmModel: string;
   llmApiKey: string;
-  ttsProvider: "fish" | "huggingface" | "elevenlabs" | "polly";
+  ttsProvider: "fish" | "huggingface" | "elevenlabs" | "polly" | "colab";
+  renderProvider: "lambda" | "colab" | "github";
   fishModelA: string;
   fishModelB: string;
   fishApiKey: string;
@@ -60,10 +61,13 @@ export type SettingsState = {
   pollyVoiceA: string;
   pollyVoiceB: string;
   colabUrl: string;
+  githubToken: string;
+  githubRepo: string;
   hasLlmApiKey?: boolean;
   hasFishApiKey?: boolean;
   hasHfToken?: boolean;
   hasElevenLabsApiKey?: boolean;
+  hasGithubToken?: boolean;
 };
 
 export type { ScriptLine };

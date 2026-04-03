@@ -282,6 +282,106 @@ export const hydrateScriptLineTimings = (
   });
 };
 
+/**
+ * Maps app-side editConfig fields to Remotion-side editConfig fields.
+ * The app uses names like subtitleFont, subtitleFill, subtitleStroke, etc.
+ * Remotion uses subtitleFontFamily, subtitleColor, subtitleOutlineColor, etc.
+ * This bridge ensures user customizations actually reach the renderer.
+ */
+const mapEditConfigToRemotion = (raw: Record<string, unknown>): Record<string, unknown> => {
+  // Start with Remotion defaults
+  const remotion: Record<string, unknown> = {};
+
+  // ── Direct pass-through fields (same name on both sides) ──
+  const directFields = [
+    "stickerAnim", "subtitleSize", "subtitleY", "bgDimOpacity",
+    "stickerShape", "showProgressBar", "subtitlePosition",
+  ];
+  for (const field of directFields) {
+    if (raw[field] !== undefined) {
+      remotion[field] = raw[field];
+    }
+  }
+
+  // ── Mapped fields (different names) ──
+
+  // subtitleFont → subtitleFontFamily (extract font family name from CSS font string)
+  if (typeof raw.subtitleFont === "string") {
+    const fontFamily = raw.subtitleFont.split(",")[0].trim().replace(/['"]/g, "");
+    if (fontFamily) remotion.subtitleFontFamily = fontFamily;
+  }
+
+  // subtitleFill → subtitleColor
+  if (typeof raw.subtitleFill === "string") {
+    remotion.subtitleColor = raw.subtitleFill;
+  }
+
+  // subtitleStroke → subtitleOutlineColor
+  if (typeof raw.subtitleStroke === "string") {
+    remotion.subtitleOutlineColor = raw.subtitleStroke;
+  }
+
+  // subtitleHighlight is used as accent in the app — Remotion handles this via
+  // speaker colors + accentColor prop, so we don't map it to editConfig.
+
+  // bgColorOverlay → bgGradientColors (derive a two-color gradient)
+  if (typeof raw.bgColorOverlay === "string" && raw.bgColorOverlay) {
+    remotion.bgGradientColors = [raw.bgColorOverlay, "#0a1620"];
+  }
+
+  // stickerSizeA / stickerSizeB → stickerSize (use average or speakerA size)
+  if (typeof raw.stickerSizeA === "number") {
+    const sizeA = raw.stickerSizeA as number;
+    const sizeB = typeof raw.stickerSizeB === "number" ? (raw.stickerSizeB as number) : sizeA;
+    remotion.stickerSize = Math.round((sizeA + sizeB) / 2);
+  }
+
+  // introAnim → transitionStyle
+  if (typeof raw.introAnim === "string") {
+    const introMap: Record<string, string> = {
+      "none": "none",
+      "zoom-in": "zoom",
+      "slide-up": "slide-up",
+      "fade": "fade",
+    };
+    remotion.transitionStyle = introMap[raw.introAnim] ?? "fade";
+  }
+
+  // speakerLayout → mapped to Remotion speakerLayout values
+  if (typeof raw.speakerLayout === "string") {
+    const layoutMap: Record<string, string> = {
+      "top-bottom": "top-bottom",
+      "left-right": "left-right",
+    };
+    remotion.speakerLayout = layoutMap[raw.speakerLayout] ?? "bottom-anchored";
+  }
+
+  // ── Pass through any Remotion-native fields (forward compatibility) ──
+  // If the editConfig already has Remotion-native fields (e.g., from a newer
+  // editor version), preserve them without overwriting our mapped values.
+  const remotionNativeFields = [
+    "stickerPosition", "stickerScale", "stickerGlowIntensity", "stickerBorderWidth",
+    "stickerOffsetX", "stickerOffsetY", "showStickerLabels", "stickerGap",
+    "subtitleFontWeight", "subtitleLetterSpacing", "subtitleLineHeight",
+    "subtitleTextAlign", "subtitlePadding", "subtitleShadowBlur",
+    "subtitleShadowOffsetY", "subtitleBackgroundOpacity", "subtitleBackgroundBlur",
+    "bgBlur", "bgSaturation", "bgBrightness", "bgContrast", "bgScale", "bgType",
+    "colorGrading", "safeAreaPadding", "progressBarHeight", "progressBarY",
+    "showIntroBadge", "introBadgeDuration", "transitionDuration",
+    "speakerHighlightDelay", "subtitleOutlineWidth", "progressBarBgColor",
+    "watermarkText", "watermarkPosition", "watermarkOpacity", "watermarkSize",
+    "kenBurns", "bgGradientColors", "subtitleFontFamily", "subtitleColor",
+    "subtitleOutlineColor", "stickerSize",
+  ];
+  for (const field of remotionNativeFields) {
+    if (raw[field] !== undefined && remotion[field] === undefined) {
+      remotion[field] = raw[field];
+    }
+  }
+
+  return remotion;
+};
+
 export const buildRenderInputProps = async ({
   bucket,
   region,
@@ -294,6 +394,7 @@ export const buildRenderInputProps = async ({
   s3AudioKeys,
   transcriptKey,
   resolution,
+  videoMode,
 }: {
   bucket: string;
   region?: string;
@@ -306,6 +407,7 @@ export const buildRenderInputProps = async ({
   s3AudioKeys: Record<string, string>;
   transcriptKey: string | null;
   resolution: "720p" | "480p";
+  videoMode?: string;
 }) => {
   const audioKey = s3AudioKeys.master ?? Object.values(s3AudioKeys)[0] ?? "";
   const wordTimings = transcriptKey ? await getObjectJson<HydratedWordTiming[]>({ bucket, key: transcriptKey, region }) : [];
@@ -317,16 +419,31 @@ export const buildRenderInputProps = async ({
     resolvedBackgroundUrl = getRandomVideo(backgroundGameId) ?? "";
   }
 
+  // Shape speakerA/B to match the Remotion speakerConfigSchema
+  const shapeSpeaker = (raw: Record<string, unknown>, fallbackLabel: string, fallbackColor: string) => ({
+    label: (raw.label as string) ?? fallbackLabel,
+    stickerUrl: (raw.stickerUrl as string) ?? "",
+    color: (raw.color as string) ?? fallbackColor,
+    stickerEnabled: raw.stickerEnabled !== undefined ? Boolean(raw.stickerEnabled) : !!raw.stickerUrl,
+  });
+
+  // Map app-side editConfig to Remotion-side editConfig
+  const remotionEditConfig = mapEditConfigToRemotion(editConfig);
+
   return {
     audioSrc: audioKey ? await presignedGet({ bucket, key: audioKey, region, expiresIn: 3600 }) : "",
     backgroundSrc: resolvedBackgroundUrl,
     wordTimings,
     scriptLines: hydratedLines,
-    speakerA,
-    speakerB,
+    speakerA: shapeSpeaker(speakerA, "Speaker A", "#61d6ff"),
+    speakerB: shapeSpeaker(speakerB, "Speaker B", "#ffb259"),
     subtitleStyle: subtitleStyle ?? "pop-highlight",
-    editConfig,
-    resolution,
+    editConfig: remotionEditConfig,
+    videoMode: videoMode ?? "duo-debate",
+    videoStyle: "default",
+    speakerLayout: "bottom-anchored",
+    overlays: [],
+    resolution: resolution ?? "720p",
   };
 };
 

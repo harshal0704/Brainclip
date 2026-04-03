@@ -238,6 +238,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         s3AudioKeys: (nextJob.s3AudioKeys ?? {}) as Record<string, string>,
         transcriptKey: nextJob.s3TranscriptKey,
         resolution: nextJob.resolution,
+        videoMode: nextJob.videoMode ?? "duo-debate",
       });
 
       try {
