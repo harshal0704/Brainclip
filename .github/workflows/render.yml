@@ -167,7 +167,7 @@ jobs:
                 if (stat.size > 0) {
                   console.log(`✅ CACHED  [${label}]: ${path.basename(localFile)} (${(stat.size / 1024 / 1024).toFixed(1)}MB)`);
                   cached++;
-                  return require('url').pathToFileURL(localFile).href;
+                  return `http://127.0.0.1:8080/${path.basename(localFile)}`;
                 }
               }
 
@@ -183,7 +183,7 @@ jobs:
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
                 console.log(`✅ OK      [${label}]: ${(stat.size / 1024 / 1024).toFixed(1)}MB in ${elapsed}s`);
                 downloaded++;
-                return require('url').pathToFileURL(localFile).href;
+                return `http://127.0.0.1:8080/${path.basename(localFile)}`;
               } catch (err) {
                 console.warn(`⚠️  FAILED  [${label}]: ${err.message} — falling back to remote URL`);
                 try { fs.unlinkSync(localFile); } catch {}
@@ -236,6 +236,13 @@ jobs:
           ")
           echo "composition=$VIDEO_MODE" >> $GITHUB_OUTPUT
           echo "Using composition: $VIDEO_MODE"
+
+      - name: Serve cached media
+        run: |
+          cd .media-cache
+          python -m http.server 8080 &
+          echo "✅ Started media cache server on port 8080"
+          sleep 1
 
       - name: Render Video
         run: |
