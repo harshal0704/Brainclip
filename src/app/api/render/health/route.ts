@@ -13,6 +13,14 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const provider = url.searchParams.get("provider") || "lambda";
 
+    if (provider === "colab") {
+      return NextResponse.json({
+        ok: true,
+        provider: "colab",
+        note: "Checking Colab health...",
+      });
+    }
+
     const functionName = process.env.REMOTION_FUNCTION_NAME;
 
     if (provider === "github") {

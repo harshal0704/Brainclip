@@ -223,7 +223,7 @@ def _load_s2_engine() -> Any:
     else:
         raise ImportError(
             "Neither vllm-omni nor fish-speech is installed. "
-            "Run: pip install vllm==0.8.4  OR  pip install fish-speech"
+            "Run: pip install vllm-omni  OR  pip install fish-speech"
         )
 
     return s2_engine

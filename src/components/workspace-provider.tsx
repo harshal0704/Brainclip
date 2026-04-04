@@ -261,6 +261,8 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
         } else {
           setRenderHealth({ ok: false, note: data.note || "GitHub connection failed." });
         }
+      } else if (data.provider === "colab") {
+        setRenderHealth({ ok: true, note: "Colab server is selected as the render provider." });
       } else {
         setRenderHealth({ ok: true, note: `${data.functionName} ready in AWS Lambda.` });
       }

@@ -14,5 +14,5 @@ torch==2.5.1
 torchaudio==2.5.1
 transformers==4.49.0
 accelerate==1.2.1
-vllm==0.8.4
+vllm-omni
 pydantic==2.10.6
