@@ -16,8 +16,9 @@ const getRenderEnv = () => {
   const region = process.env.AWS_REGION as "us-east-1" | undefined;
   const functionName = process.env.REMOTION_FUNCTION_NAME;
   const serveUrl = process.env.REMOTION_SERVE_URL;
+  const functionUrl = process.env.REMOTION_FUNCTION_URL || "https://jpyqi3pbpj5lkk5qgfz33pmhvu0kjtkl.lambda-url.us-east-1.on.aws/";
 
-  if (!region || !functionName || !serveUrl) {
+  if ((!region || !functionName) && !functionUrl) {
     throw new AppError(
       "render_env_missing",
       "Missing Remotion Lambda environment variables",
@@ -26,7 +27,7 @@ const getRenderEnv = () => {
     );
   }
 
-  return { region, functionName, serveUrl };
+  return { region, functionName, serveUrl: serveUrl || "", functionUrl };
 };
 
 const getErrorMessage = (error: unknown) => {
@@ -108,9 +109,37 @@ export async function triggerLambdaRender(job: JobRecord, inputProps: Record<str
   const compositionName = getCompositionName(videoMode);
 
   try {
+    if (env.functionUrl) {
+      const response = await fetch(env.functionUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "renderMedia",
+          serveUrl: env.serveUrl,
+          composition: compositionName,
+          inputProps,
+          codec: "h264",
+          imageFormat: "jpeg",
+          framesPerLambda: 200,
+          privacy: "private",
+          deleteAfter: "7-days",
+          outName: job.s3VideoKey?.split("/").pop() ?? "final.mp4",
+          downloadBehavior: { type: "play-in-browser" },
+          timeoutInMilliseconds: 890000,
+          crf: 28,
+          logLevel: "verbose"
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return await response.json();
+    }
+
     const render = await renderMediaOnLambda({
-      region: env.region,
-      functionName: env.functionName,
+      region: env.region!,
+      functionName: env.functionName!,
       serveUrl: env.serveUrl,
       composition: compositionName,
       inputProps,
@@ -157,9 +186,26 @@ export async function getLambdaRenderProgress(input: z.infer<typeof renderProgre
   const { getRenderProgress } = await import("@remotion/lambda/client");
 
   try {
+    if (env.functionUrl) {
+      const response = await fetch(env.functionUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "status",
+          renderId: payload.renderId,
+          bucketName: payload.bucketName
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return await response.json();
+    }
+
     return await getRenderProgress({
-      region: env.region,
-      functionName: env.functionName,
+      region: env.region!,
+      functionName: env.functionName!,
       bucketName: payload.bucketName,
       renderId: payload.renderId,
     });
